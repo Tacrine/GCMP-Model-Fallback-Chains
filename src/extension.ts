@@ -4,7 +4,6 @@ import type { RouterConfig, Chain, Target, ProxyTarget } from './types';
 import { FallbackRouterProvider } from './provider';
 import { OutputLogger, StatusBar } from './observability';
 import { importGcmp, GcmpEntry } from './import/importer';
-import { redact } from './util/redact';
 
 const VENDOR = 'fallbackrouter';
 const SECRET_PREFIX = 'fallbackrouter.';
