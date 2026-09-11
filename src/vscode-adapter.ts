@@ -26,15 +26,13 @@ export function fromVscodeMessages(msgs: readonly vscode.LanguageModelChatReques
         }
         parts.push({ kind: 'toolCall', callId: p.callId, name: p.name, input });
       } else if (p instanceof vscode.LanguageModelToolResultPart) {
-        const content = Array.isArray(p.content)
-          ? p.content.map((c) => (c instanceof vscode.LanguageModelTextPart ? c.value : String(c))).join('\n')
-          : String(p.content);
-        parts.push({ kind: 'toolResult', callId: p.callId, content, isError: p.isError });
+        const content = p.content.map((c) => (c instanceof vscode.LanguageModelTextPart ? c.value : String(c))).join('\n');
+        parts.push({ kind: 'toolResult', callId: p.callId, content });
       } else if (p instanceof vscode.LanguageModelDataPart) {
         // Binary/image. Marked so preflight can skip non-image targets.
         parts.push({ kind: 'data', mime: p.mimeType?.startsWith('image') ? 'image' : 'text', data: p.data });
       } else {
-        skipped.push({ role: m.role, reason: `unknown part type filtered: ${p.constructor?.name ?? 'unknown'}` });
+        skipped.push({ role: m.role, reason: `unknown part type filtered: ${String(p)}` });
       }
     }
     messages.push({ role: m.role === vscode.LanguageModelChatMessageRole.User ? 1 : 2, parts, name: m.name });
@@ -48,11 +46,18 @@ export function toVscodePart(part: LangPart): vscode.LanguageModelResponsePart {
     case 'text':
       return new vscode.LanguageModelTextPart(part.value);
     case 'toolCall':
-      return new vscode.LanguageModelToolCallPart(part.callId, part.name, part.input);
+      return new vscode.LanguageModelToolCallPart(
+        part.callId,
+        part.name,
+        typeof part.input === 'object' && part.input !== null ? part.input : {}
+      );
     case 'toolResult':
-      return new vscode.LanguageModelToolResultPart(part.callId, String(part.content), part.isError);
+      return new vscode.LanguageModelToolResultPart(part.callId, [new vscode.LanguageModelTextPart(String(part.content))]);
     case 'data':
-      return new vscode.LanguageModelDataPart(part.mime === 'image' ? 'image/png' : 'text/plain', part.data);
+      return vscode.LanguageModelDataPart.image(
+        part.data instanceof Uint8Array ? part.data : new Uint8Array(0),
+        part.mime === 'image' ? 'image/png' : 'application/json'
+      );
   }
 }
 

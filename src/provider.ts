@@ -10,6 +10,19 @@ import { OutputLogger, StatusBar } from './observability';
 /** Code we throw when aborting after a tool call / full-chain failure.
  * From T1 third stage; falls back to Unknown if none suppresses retry. */
 export const SUPPRESS_RETRY_CODE = 'Unknown';
+/** Stable `LanguageModelError` only exposes NoPermissions/Blocked/NotFound; use the
+ * string code 'Unknown' for unspecified failures (its `code` field is a string). */
+const CODE_UNKNOWN = 'Unknown';
+
+/** Build a LanguageModelError for a given code string. Stable API has no
+ * `Unknown` factory, so Unknown maps to `NotFound` (unspecified model failure). */
+function lmError(message: string, code: string): vscode.LanguageModelError {
+  switch (code) {
+    case 'NoPermissions': return vscode.LanguageModelError.NoPermissions(message);
+    case 'Blocked': return vscode.LanguageModelError.Blocked(message);
+    default: return vscode.LanguageModelError.NotFound(message);
+  }
+}
 
 export interface ProviderDeps {
   getConfig: () => RouterConfig;
@@ -85,7 +98,7 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
   ): Promise<void> {
     const cfg = this.deps.getConfig();
     const entry = this.modelsByChain.get(model.id);
-    if (!entry) throw new vscode.LanguageModelError(`model ${model.id} not configured`, vscode.LanguageModelError.Unknown);
+    if (!entry) throw lmError(`model ${model.id} not configured`, CODE_UNKNOWN);
     const { chain } = entry;
 
     const conv = fromVscodeMessages(messages);
@@ -134,9 +147,9 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
       if (err instanceof CancellationError) throw err;
       if (err instanceof RouterError) {
         this.deps.logger.error(`[provider] chain ${chain.id} failed: ${err.message}`);
-        throw new vscode.LanguageModelError(
+        throw lmError(
           `${err.message} (chain=${chain.id}${err.targetKey ? ', target=' + err.targetKey : ''})`,
-          err.code === 'Unknown' ? vscode.LanguageModelError.Unknown : mapCode(err.code)
+          err.code === 'Unknown' ? CODE_UNKNOWN : mapCode(err.code)
         );
       }
       throw err;
@@ -159,14 +172,14 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
     if (t.kind === 'http') {
       return new HttpTransport({
         logger: this.deps.logger,
-        getSecret: (ref) => this.deps.secrets.get(`fallbackrouter.${ref}`),
+        getSecret: async (ref) => this.deps.secrets.get(`fallbackrouter.${ref}`),
         secretsToRedact: () => this.deps.getSecretsProvider()(),
       });
     }
     return new ProxyTransport({
       logger: this.deps.logger,
       lm: lmAdapter,
-      toUpstreamMessages: (m) => m,
+      toUpstreamMessages: (m) => m as unknown as unknown[],
       toUpstreamPart: (p) => p,
       toDownstreamPart: (p) => proxyToLangPart(p),
     });
@@ -209,12 +222,12 @@ class EmitGuard {
   block(): void { this.allowed = false; }
 }
 
-function mapCode(code: string): vscode.LanguageModelErrorCode {
+function mapCode(code: string): string {
   switch (code) {
-    case 'NoPermissions': return vscode.LanguageModelError.NoPermissions;
-    case 'Blocked': return vscode.LanguageModelError.Blocked;
-    case 'NotFound': return vscode.LanguageModelError.NotFound;
-    default: return vscode.LanguageModelError.Unknown;
+    case 'NoPermissions': return 'NoPermissions';
+    case 'Blocked': return 'Blocked';
+    case 'NotFound': return 'NotFound';
+    default: return CODE_UNKNOWN;
   }
 }
 
@@ -225,10 +238,14 @@ const lmAdapter: LmLike = {
       vendor: m.vendor,
       id: m.id,
       async sendRequest(msgs, options, token) {
-        const resp = await m.sendRequest(msgs as never, { tools: options.tools as never, toolMode: options.toolMode as never, modelOptions: options.modelOptions }, token as vscode.CancellationToken);
+        const resp = await m.sendRequest(
+          msgs as never,
+          { tools: options.tools as never, toolMode: options.toolMode as never, modelOptions: options.modelOptions },
+          token as unknown as vscode.CancellationToken
+        );
         return { stream: resp.stream as AsyncIterable<import('./transport/proxyTransport').ChatPartLike> };
       },
-      async countTokens(text, t) { return m.countTokens(text, t); },
+      async countTokens(text, t) { return m.countTokens(text, t as unknown as vscode.CancellationToken | undefined); },
     }));
   },
 };

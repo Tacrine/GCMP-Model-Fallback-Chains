@@ -1,4 +1,4 @@
-import type { ApiType, Chain, HttpTarget } from './types';
+import type { ApiType, Chain, HttpTarget } from '../types';
 
 export interface GcmpEntry {
   id: string;

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { normalizeConfig, ConfigSink } from './config';
-import type { RouterConfig, Chain, Target } from './types';
+import type { RouterConfig, Chain, Target, ProxyTarget } from './types';
 import { FallbackRouterProvider } from './provider';
 import { OutputLogger, StatusBar } from './observability';
 import { importGcmp, GcmpEntry } from './import/importer';
@@ -21,8 +21,10 @@ let statusBar: StatusBar;
 let provider: FallbackRouterProvider;
 let config: RouterConfig;
 let secretRefs: string[] = [];
+let activeContext: vscode.ExtensionContext;
 
 export function activate(context: vscode.ExtensionContext): void {
+  activeContext = context;
   logger = new OutputLogger(() => loadAllSecrets());
   statusBar = new StatusBar();
   statusBar.show();
@@ -66,7 +68,7 @@ async function loadAllSecrets(): Promise<string[]> {
   return knownSecrets;
 }
 
-const knownSecrets: string[] = [];
+let knownSecrets: string[] = [];
 
 function loadConfig(): RouterConfig {
   const raw = vscode.workspace.getConfiguration('fallbackRouter');
@@ -168,7 +170,7 @@ async function testTarget(chain: Chain): Promise<void> {
   const target = chain.targets[picked.index];
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing target...' }, async () => {
     if (target.kind === 'http') {
-      const t = new HttpTransport({ logger, getSecret: (r) => context.secrets.get(SECRET_PREFIX + r), secretsToRedact: () => Promise.resolve(secretRefs) });
+      const t = new HttpTransport({ logger, getSecret: async (r) => activeContext.secrets.get(SECRET_PREFIX + r), secretsToRedact: () => Promise.resolve(secretRefs) });
       const r = await t.probe(target);
       const msg = `${targetLabel(target)}: ${r.ok ? 'ok' : 'failed'} — ${r.message} (firstByte ${r.firstByteMs}ms, toolCalling=${r.toolCalling})`;
       logger.info(`[test] ${msg}`);
@@ -253,7 +255,7 @@ async function waitForModels(chains: Chain[], timeoutMs: number): Promise<boolea
 }
 
 async function warmup(): Promise<void> {
-  const proxyTargets: Target[] = [];
+  const proxyTargets: ProxyTarget[] = [];
   for (const c of config.chains) for (const t of c.targets) if (t.kind === 'proxy') proxyTargets.push(t);
   if (proxyTargets.length === 0) {
     void vscode.window.showInformationMessage('No proxy targets configured.');
@@ -262,10 +264,11 @@ async function warmup(): Promise<void> {
   for (const t of proxyTargets) {
     try {
       const models = await vscode.lm.selectChatModels({ vendor: t.vendor, id: t.modelId });
-      const access = await vscode.lm.accessInformation();
-      let canSend = 'unknown';
-      try { canSend = String(access.canSendRequest(models[0])); } catch { /* not available */ }
-      const msg = `[warmup] ${t.vendor}/${t.modelId}: found=${models.length} canSend=${canSend}`;
+      // canSendRequest requires the model provider's LanguageModelAccessInformation
+      // (via Extension.languageModelAccessInformation), which we cannot resolve to a
+      // vendor-extension id generically; report found count and ids.
+      const canSend = 'n/a';
+      const msg = `[warmup] ${t.vendor}/${t.modelId}: found=${models.length} canSend=${canSend} ids=[${models.map((m) => m.id).join(', ')}]`;
       logger.info(msg);
       void vscode.window.showInformationMessage(msg);
     } catch (e) {
@@ -281,12 +284,14 @@ async function setApiKey(): Promise<void> {
     void vscode.window.showInformationMessage('No http targets configured.');
     return;
   }
-  const picks = httpTargets.map((x) => ({ label: targetLabel(x.target), ref: x.target.secretRef }));
+  const picks = httpTargets.map((x) => ({ label: targetLabel(x.target), ref: x.target.kind === 'http' ? x.target.secretRef : '' }));
   const picked = await vscode.window.showQuickPick(picks, { title: 'Select target to set API key' });
   if (!picked) return;
   const key = await vscode.window.showInputBox({ prompt: 'API key (stored in SecretStorage)', password: true });
   if (key === undefined || key === '') return;
-  await context.secrets.store(SECRET_PREFIX + picked.ref, key);
+  await activeContext.secrets.store(SECRET_PREFIX + picked.ref, key);
+  if (!secretRefs.includes(picked.ref)) secretRefs.push(picked.ref);
+  if (key.length >= 4 && !knownSecrets.includes(key)) knownSecrets.push(key);
   void vscode.window.showInformationMessage(`API key stored for ${picked.ref}`);
   await refreshSecrets();
 }
@@ -340,17 +345,17 @@ async function cleanup(context: vscode.ExtensionContext): Promise<void> {
     'Delete'
   );
   if (confirm !== 'Delete') return;
-  for (const key of await context.secrets.get?.() ?? []) {
-    if (key.startsWith(SECRET_PREFIX)) await context.secrets.delete(key);
-  }
-  const keys = context.globalState.keys();
-  for (const k of keys) {
+  // SecretStorage has no enumeration API; delete keys for configured http targets + tracked refs.
+  const refs = new Set<string>(secretRefs);
+  for (const c of config.chains) for (const t of c.targets) if (t.kind === 'http') refs.add(t.secretRef);
+  for (const ref of refs) await Promise.resolve(context.secrets.delete(SECRET_PREFIX + ref)).catch(() => {});
+  for (const k of context.globalState.keys()) {
     if (k.startsWith('fallbackrouter.')) await context.globalState.update(k, undefined);
   }
   void vscode.window.showInformationMessage('Fallback Router data cleaned.');
 }
 
-function openSettings(): Promise<void> {
+function openSettings(): Thenable<void> {
   return vscode.commands.executeCommand('workbench.action.openSettings', 'fallbackRouter');
 }
 

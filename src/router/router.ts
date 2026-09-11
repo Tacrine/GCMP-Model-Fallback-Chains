@@ -138,7 +138,7 @@ export function backoffDelay(attempt: number, opts: RunOptions['retry']): number
 }
 
 export interface NoticeEmitter {
-  (text: string): void;
+  (part: LangPart): void;
 }
 
 /**
@@ -312,7 +312,7 @@ export class FallbackRouter {
       }
       lastError = outcome.error;
       lastRetryable = !!outcome.retryable;
-      lastErrorCode = outcome.error?.code ?? errorCode(outcome.error);
+      lastErrorCode = (outcome.error as { code?: string } | undefined)?.code ?? errorCode(outcome.error);
       this.deps.logger.warn(`[router] target=${targetKey(target)} attempt=${attempt + 1} failed: ${describeError(outcome.error)}`);
 
       if (token.isCancellationRequested) throw new CancellationError();

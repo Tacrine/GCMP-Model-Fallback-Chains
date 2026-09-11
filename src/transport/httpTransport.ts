@@ -196,8 +196,8 @@ export class HttpTransport implements Transport {
       const firstReadPromise = reader.read();
       const first = await Promise.race([
         firstReadPromise,
-        new Promise<{ done: true }>((resolve) => {
-          const timer = setTimeout(() => resolve({ done: true }), t.firstByteMs);
+        new Promise<{ done: true; value?: undefined }>((resolve) => {
+          const timer = setTimeout(() => resolve({ done: true, value: undefined }), t.firstByteMs);
           (timer as unknown as { unref?: () => void }).unref?.();
         }),
       ]);
