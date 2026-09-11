@@ -79,8 +79,10 @@ export function importGcmp(entries: readonly GcmpEntry[], mode: 'family' | 'exac
   }
 
   const out: Chain[] = [];
-  // Preserve first-appearance order of groups.
+  // Preserve first-appearance order of groups; within a group sort targets
+  // deterministically by provider then model so draft chain order is stable.
   for (const [key, targets] of chains) {
+    targets.sort((a, b) => (a.secretRef < b.secretRef ? -1 : a.secretRef > b.secretRef ? 1 : a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
     out.push({ id: key, name: key, targets });
   }
   return { chains: out, skipped };

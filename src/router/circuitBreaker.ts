@@ -69,6 +69,12 @@ export class CircuitBreaker {
   }
 
   beginProbe(): void {
+    // A probe may start when the breaker was open but its cooldown elapsed;
+    // canAttempt() normally performs this transition, but a direct probe must too.
+    if (this.state === 'open' && this.now() >= this.openUntil) {
+      this.state = 'halfOpen';
+      this.persist();
+    }
     if (this.state === 'halfOpen') this.halfOpenInFlight = true;
   }
 

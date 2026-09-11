@@ -83,6 +83,26 @@ export class HttpTransport implements Transport {
     const controller = new AbortController();
     const disp = token.onCancellationRequested(() => controller.abort());
     try {
+      // Short-circuit when an API key is required but missing; sending would
+      // only produce a 401. Guard against customHeader-supplied Authorization.
+      if (target.secretRef) {
+        const key = await this.deps.getSecret(target.secretRef);
+        const hasCustomAuth = !!target.customHeader &&
+          Object.keys(target.customHeader).some((k) => k.toLowerCase() === 'authorization');
+        if (!key && !hasCustomAuth) {
+          return {
+            ok: false,
+            error: new HttpError(
+              `API key missing for ${target.secretRef}; run "Fallback Router: Set API Key" (fallbackrouter.setApiKey)`,
+              undefined,
+              'missingApiKey'
+            ),
+            retryable: false,
+            emittedParts: 0,
+            emittedToolCall: false,
+          };
+        }
+      }
       const { url, body, apiType } = this.buildRequest(target, messages, options);
       this.deps.logger.debug(`[http] POST ${url} apiType=${apiType}`);
       const res = await this.fetchWithTimeout(target, url, body, controller, options.timeouts);
@@ -180,78 +200,69 @@ export class HttpTransport implements Transport {
     let emittedParts = 0;
     let emittedToolCall = false;
     const assembler = new ToolCallAssembler();
-    let lastChunkAt = Date.now();
 
-    const stallTimer = () =>
-      new Promise<boolean>((resolve) => {
-        const check = setInterval(() => {
-          if (token.isCancellationRequested) { clearInterval(check); resolve(false); }
-          else if (Date.now() - lastChunkAt > t.stallMs) { clearInterval(check); resolve(true); }
-        }, Math.min(t.stallMs, 250));
-        (check as unknown as { unref?: () => void }).unref?.();
-      });
-
-    try {
-      // first-byte timeout: race first read against firstByteMs.
-      const firstReadPromise = reader.read();
-      const first = await Promise.race([
-        firstReadPromise,
-        new Promise<{ done: true; value?: undefined }>((resolve) => {
-          const timer = setTimeout(() => resolve({ done: true, value: undefined }), t.firstByteMs);
+    const readBounded = (ms: number) =>
+      Promise.race([
+        reader.read().then((r) => ({ ...r, timeout: false as const })),
+        new Promise<{ done: false; value: undefined; timeout: true }>((resolve) => {
+          const timer = setTimeout(() => resolve({ done: false, value: undefined, timeout: true }), ms);
           (timer as unknown as { unref?: () => void }).unref?.();
         }),
       ]);
-      let { done, value } = first;
-      while (!done) {
-        lastChunkAt = Date.now();
-        const text = decoder.decode(value, { stream: true });
-        buffer += text;
-        const { chunks, rest } = parseSse(buffer);
-        buffer = rest;
-        for (const chunk of chunks) {
-          if (!chunk.data) continue;
-          if (chunk.data === '[DONE]') { done = true; break; }
-          const parsed = apiType === 'responses' ? responsesEvent(chunk.data) : chatCompletionsDelta(chunk.data);
-          if (!parsed) continue;
-          if (parsed.error) {
-            return { ok: false, error: new Error(parsed.error), retryable: isRetryableHttpCode(parsed.httpStatus), emittedParts, emittedToolCall };
-          }
-          if (parsed.chunk) {
-            assembler.feed(parsed.chunk);
-            // emit completed calls as they finish (multiple parallel supported)
-            for (const call of assembler.flush()) {
-              emittedToolCall = true;
-              emittedParts++;
-              emit({ kind: 'toolCall', callId: call.callId, name: call.name, input: safeParse(call.arguments) });
-            }
-          }
-          if (parsed.part) {
-            if (parsed.part.kind === 'text') { emittedParts++; emit(parsed.part); }
-          }
-          if (parsed.done) {
-            for (const call of assembler.flush()) {
-              emittedToolCall = true;
-              emittedParts++;
-              emit({ kind: 'toolCall', callId: call.callId, name: call.name, input: safeParse(call.arguments) });
-            }
-            return { ok: true, emittedParts, emittedToolCall };
-          }
-        }
-        if (token.isCancellationRequested) return { ok: false, error: new Error('cancelled'), retryable: false, emittedParts, emittedToolCall };
-        // stall timeout check
-        const stalled = await Promise.race([stallTimer(), Promise.resolve(false)]);
-        if (stalled) {
-          return { ok: false, error: new Error(`stall timeout after ${t.stallMs}ms`), retryable: true, emittedParts, emittedToolCall };
-        }
-        if (token.isCancellationRequested) return { ok: false, error: new Error('cancelled'), retryable: false, emittedParts, emittedToolCall };
-        ({ done, value } = await reader.read());
-      }
-      // end of stream: flush any assembled tool calls
+
+    const flushToolCalls = (): void => {
+      assembler.markDone();
       for (const call of assembler.flush()) {
         emittedToolCall = true;
         emittedParts++;
         emit({ kind: 'toolCall', callId: call.callId, name: call.name, input: safeParse(call.arguments) });
       }
+    };
+
+    try {
+      const first = await readBounded(t.firstByteMs);
+      if (first.timeout) {
+        return { ok: false, error: new Error(`first byte timeout after ${t.firstByteMs}ms`), retryable: true, emittedParts, emittedToolCall };
+      }
+      let done = first.done;
+      let value = first.value;
+      while (!done) {
+        if (token.isCancellationRequested) return { ok: false, error: new Error('cancelled'), retryable: false, emittedParts, emittedToolCall };
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const { chunks, rest } = parseSse(buffer);
+          buffer = rest;
+          for (const chunk of chunks) {
+            if (!chunk.data) continue;
+            if (chunk.data === '[DONE]') { done = true; break; }
+            const parsed = apiType === 'responses' ? responsesEvent(chunk.data) : chatCompletionsDelta(chunk.data);
+            if (!parsed) continue;
+            if (parsed.error) {
+              return { ok: false, error: new Error(parsed.error), retryable: isRetryableHttpCode(parsed.httpStatus), emittedParts, emittedToolCall };
+            }
+            if (parsed.chunk) {
+              assembler.feed(parsed.chunk);
+            }
+            if (parsed.part && parsed.part.kind === 'text') {
+              emittedParts++;
+              emit(parsed.part);
+            }
+            if (parsed.done) {
+              flushToolCalls();
+              return { ok: true, emittedParts, emittedToolCall };
+            }
+          }
+          if (done) break;
+        }
+        if (token.isCancellationRequested) return { ok: false, error: new Error('cancelled'), retryable: false, emittedParts, emittedToolCall };
+        const next = await readBounded(t.stallMs);
+        if (next.timeout) {
+          return { ok: false, error: new Error(`stall timeout after ${t.stallMs}ms`), retryable: true, emittedParts, emittedToolCall };
+        }
+        done = next.done;
+        value = next.value;
+      }
+      flushToolCalls();
       return { ok: true, emittedParts, emittedToolCall };
     } catch (e) {
       if (token.isCancellationRequested) return { ok: false, error: new Error('cancelled'), retryable: false, emittedParts, emittedToolCall };
@@ -268,7 +279,9 @@ export class HttpTransport implements Transport {
   }
 }
 
-function readBody(res: Response): Promise<string> {
+async function readBody(res: Response): Promise<string> {
+  // res.text() may throw synchronously on mocks lacking text(); being async
+  // routes that throw into the await so `.catch(() => '')` handles it.
   return res.text();
 }
 

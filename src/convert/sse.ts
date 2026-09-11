@@ -111,24 +111,29 @@ export interface AssembledToolCall {
 /** Accumulate tool-call chunks per call key and emit a complete call when the
  * stream ends / a done marker arrives. Supports multiple parallel calls. */
 export class ToolCallAssembler {
-  private byKey = new Map<string, { callId: string; name: string; args: string }>();
+  private byKey = new Map<string, { callId: string; name: string; args: string; complete: boolean }>();
 
   feed(chunk: ToolCallChunk | undefined): void {
     if (!chunk) return;
     let bucket = this.byKey.get(chunk.key);
     if (!bucket) {
-      bucket = { callId: chunk.callId || `call_${this.byKey.size}`, name: '', args: '' };
+      bucket = { callId: chunk.callId || `call_${this.byKey.size}`, name: '', args: '', complete: false };
       this.byKey.set(chunk.key, bucket);
     }
     if (chunk.name) bucket.name = chunk.name;
     bucket.args += chunk.argumentsFrag;
   }
 
-  /** Return calls that have a name+callId, removing them from the buffer. */
+  /** Mark all buffered calls complete (call after a done marker / stream end). */
+  markDone(): void {
+    for (const b of this.byKey.values()) b.complete = true;
+  }
+
+  /** Return completed calls that have a name+callId, removing them from the buffer. */
   flush(): AssembledToolCall[] {
     const out: AssembledToolCall[] = [];
     for (const [key, b] of this.byKey) {
-      if (b.name && b.callId) {
+      if (b.complete && b.name && b.callId) {
         out.push({ callId: b.callId, name: b.name, arguments: b.args });
         this.byKey.delete(key);
       }

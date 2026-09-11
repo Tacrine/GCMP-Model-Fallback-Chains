@@ -69,11 +69,11 @@ export function normalizeConfig(raw: unknown, sink: ConfigSink): ConfigLoadResul
     ? (raw.logLevel as RouterConfig['logLevel'])
     : 'info';
 
-  const chains = normalizeChains(raw.chains, warnings, sink);
+  const chainsResult = normalizeChains(raw.chains, warnings, sink);
 
   return {
     config: {
-      chains,
+      chains: chainsResult.chains,
       retry,
       circuitBreaker,
       timeouts,
@@ -85,7 +85,7 @@ export function normalizeConfig(raw: unknown, sink: ConfigSink): ConfigLoadResul
       logLevel,
     },
     warnings,
-    droppedChains,
+    droppedChains: chainsResult.dropped,
   };
 }
 
@@ -104,27 +104,32 @@ function emptyConfig(): RouterConfig {
   };
 }
 
-function normalizeChains(raw: unknown, warnings: string[], sink: ConfigSink): Chain[] {
+function normalizeChains(raw: unknown, warnings: string[], sink: ConfigSink): { chains: Chain[]; dropped: number } {
   const out: Chain[] = [];
-  if (!Array.isArray(raw)) return out;
+  let dropped = 0;
+  if (!Array.isArray(raw)) return { chains: out, dropped };
   const seenIds = new Set<string>();
   for (const item of raw) {
     if (!isRecord(item)) {
       sink.warn('chain is not an object; dropped');
+      dropped++;
       continue;
     }
     const id = typeof item.id === 'string' ? item.id.trim() : '';
     if (!id || !CHAIN_ID_RE.test(id)) {
       sink.warn(`chain dropped: invalid id ${JSON.stringify(id)}`);
+      dropped++;
       continue;
     }
     if (seenIds.has(id)) {
       sink.warn(`chain dropped: duplicate id ${id}`);
+      dropped++;
       continue;
     }
     const targets = normalizeTargets(item.targets, id, warnings, sink);
     if (targets.length === 0) {
       sink.warn(`chain ${id} dropped: no valid targets`);
+      dropped++;
       continue;
     }
     seenIds.add(id);
@@ -137,7 +142,7 @@ function normalizeChains(raw: unknown, warnings: string[], sink: ConfigSink): Ch
       sink.warn(`chain ${id}: single target, no fallback available`);
     }
   }
-  return out;
+  return { chains: out, dropped };
 }
 
 function normalizeTargets(raw: unknown, chainId: string, warnings: string[], sink: ConfigSink): Target[] {

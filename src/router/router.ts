@@ -180,7 +180,24 @@ export class FallbackRouter {
       const key = targetKey(target);
       const transport = this.deps.transports(target);
 
-      // Preflight skip.
+      // Static target-capability preflight (transport-agnostic).
+      const skip = (reason: string): void => {
+        attempts.push({
+          targetKey: key, ok: false, skippedReason: reason, attemptsMade: 0,
+          emittedParts: 0, emittedToolCall: false,
+        });
+        this.deps.logger.warn(`[router] skip ${key}: ${reason}`);
+      };
+      if (target.kind === 'http') {
+        if (needsTools && target.toolCalling === false) { skip('target does not support tool calling'); continue; }
+        if (hasDataParts && target.imageInput !== true) { skip('target does not support image input'); continue; }
+        if (target.maxInputTokens !== undefined && msgTokenCount > target.maxInputTokens) {
+          skip(`input tokens ${msgTokenCount} exceed maxInputTokens ${target.maxInputTokens}`);
+          continue;
+        }
+      }
+
+      // Transport preflight skip.
       const handle = transport.canHandle(target, needsTools, hasDataParts, msgTokenCount);
       if (!handle.ok) {
         attempts.push({
@@ -245,7 +262,11 @@ export class FallbackRouter {
       // Otherwise continue to next target.
     }
 
-    // Exhausted all targets.
+    // Exhausted all targets. If no target was actually attempted (every one
+    // skipped by preflight/breaker), report non-ok instead of throwing.
+    if (!attempts.some((a) => a.attemptsMade > 0 || a.error !== undefined)) {
+      return { ok: false, attempts, emittedParts: emittedPartsTotal };
+    }
     const firstErr = attempts.find((a) => a.error !== undefined && !a.skippedReason);
     throw new RouterError(
       `All targets in chain "${chain.id}" failed`,
