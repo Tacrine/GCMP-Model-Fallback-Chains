@@ -13,3 +13,12 @@
 - Manage, apply, warmup, setApiKey, set-default-model, diagnostics, cleanup commands.
 - Observability: output channel logging, status bar, diagnostics command, redaction.
 - Mock upstream + deterministic fault injection QA (`npm run qa:faults`).
+
+### Documentation
+- README (Chinese-primary with English summary): problem statement, wiring steps
+  (model picker vs `chat.planAgent.defaultModel` / `chat.exploreAgent.defaultModel` /
+  `chat.utilityModel`), configuration overview, A1 (proxy) vs A2 (http) tradeoffs,
+  command reference, security notes, honest limits, troubleshooting.
+- `docs/configuration.md`: full field reference tables for `fallbackRouter.*` settings,
+  chain/target schemas, wall-clock and rate-limit semantics, GCMP import behavior,
+  `managementCommand` deprecation note.
