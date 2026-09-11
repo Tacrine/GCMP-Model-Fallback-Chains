@@ -33,6 +33,10 @@
         "vendor": "fallbackrouter",
         "displayName": "Fallback Router",
         "managementCommand": "fallbackrouter.manage"
+      },
+      {
+        "vendor": "spike-test",
+        "displayName": "Spike Echo (test)"
       }
     ],
     "commands": [
@@ -108,6 +112,7 @@
     "build": "node esbuild.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "node esbuild.js && node esbuild.js --spike && node scripts/run-spike.js",
     "qa:faults": "node esbuild.js --qa && node test/qa/faults.bundle.mjs",
     "package": "vsce package"
   },

@@ -179,11 +179,41 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
     return new ProxyTransport({
       logger: this.deps.logger,
       lm: lmAdapter,
-      toUpstreamMessages: (m) => m as unknown as unknown[],
-      toUpstreamPart: (p) => p,
-      toDownstreamPart: (p) => proxyToLangPart(p),
-    });
-  }
+        // Inverse of fromVscodeMessages: vscode.lm rejects plain LangMsg objects
+        // (platform validates message shape before dispatch; T1 spike found
+        // identity passthrough -> LanguageModelError NotFound in 3ms).
+        toUpstreamMessages: (msgs) =>
+          msgs.map((m) => ({
+            role:
+              m.role === 1
+                ? vscode.LanguageModelChatMessageRole.User
+                : vscode.LanguageModelChatMessageRole.Assistant,
+            content: m.parts.map((p) => {
+              switch (p.kind) {
+                case 'text':
+                  return new vscode.LanguageModelTextPart(p.value);
+                case 'toolCall':
+                  return new vscode.LanguageModelToolCallPart(
+                    p.callId,
+                    p.name,
+                    typeof p.input === 'object' && p.input !== null ? p.input : {}
+                  );
+                case 'toolResult':
+                  return new vscode.LanguageModelToolResultPart(p.callId, [
+                    new vscode.LanguageModelTextPart(String(p.content)),
+                  ]);
+                case 'data':
+                  return vscode.LanguageModelDataPart.image(
+                    p.data instanceof Uint8Array ? p.data : new Uint8Array(0),
+                    p.mime === 'image' ? 'image/png' : 'application/json'
+                  );
+              }
+            }),
+          })),
+        toUpstreamPart: (p) => p,
+        toDownstreamPart: (p) => proxyToLangPart(p),
+      });
+    }
 
   private stateStore(): StateStore {
     return {
@@ -202,15 +232,31 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
   }
 }
 
-/** Proxy part conversion from a vscode-like part to LangPart. */
+/** Proxy part conversion from a vscode-like part to LangPart. Real vscode parts
+ * (LanguageModelTextPart etc.) have NO `.kind` property (verified in T1 spike:
+ * keys=[value]), so first dispatch on `.kind` for stubs, then on instanceof for
+ * real platform parts (same approach as GCMP's own provider). */
 function proxyToLangPart(p: import('./transport/proxyTransport').ChatPartLike): import('./types').LangPart | null {
-  switch (p.kind) {
-    case 'text': return { kind: 'text', value: p.value ?? '' };
-    case 'toolCall': return { kind: 'toolCall', callId: p.callId ?? '', name: p.name ?? '', input: p.input ?? {} };
-    case 'toolResult': return { kind: 'toolResult', callId: p.callId ?? '', content: p.content ?? '' };
-    case 'data': return { kind: 'data', mime: p.mimeType?.startsWith('image') ? 'image' : 'text', data: p.data };
-    default: return null;
+  if (typeof (p as { kind?: unknown }).kind === 'string') {
+    switch (p.kind) {
+      case 'text': return { kind: 'text', value: p.value ?? '' };
+      case 'toolCall': return { kind: 'toolCall', callId: p.callId ?? '', name: p.name ?? '', input: p.input ?? {} };
+      case 'toolResult': return { kind: 'toolResult', callId: p.callId ?? '', content: p.content ?? '' };
+      case 'data': return { kind: 'data', mime: p.mimeType?.startsWith('image') ? 'image' : 'text', data: p.data };
+      default: return null;
+    }
   }
+  if (p instanceof vscode.LanguageModelTextPart) return { kind: 'text', value: p.value ?? '' };
+  const ToolCallCtor = vscode.LanguageModelToolCallPart as (new (...a: never[]) => object) | undefined;
+  if (ToolCallCtor && p instanceof ToolCallCtor) {
+    const tc = p as { callId?: string; name?: string; input?: unknown };
+    return { kind: 'toolCall', callId: tc.callId ?? '', name: tc.name ?? '', input: tc.input ?? {} };
+  }
+  const DataCtor = vscode.LanguageModelDataPart as (new (...a: never[]) => object) | undefined;
+  if (DataCtor && p instanceof DataCtor) {
+    return { kind: 'data', mime: 'text', data: (p as { data?: unknown }).data };
+  }
+  return null;
 }
 
 class EmitGuard {
@@ -238,10 +284,20 @@ const lmAdapter: LmLike = {
       vendor: m.vendor,
       id: m.id,
       async sendRequest(msgs, options, token) {
+        // The router's Cancel is NOT a vscode.CancellationToken: its
+        // onCancellationRequested returns a plain fn, but vscode.lm expects a
+        // Disposable (it calls `.dispose()` on the returned registration).
+        const lmToken: vscode.CancellationToken = {
+          isCancellationRequested: token.isCancellationRequested,
+          onCancellationRequested: (listener) => {
+            const detach = token.onCancellationRequested(() => listener(undefined as never));
+            return { dispose: detach };
+          },
+        };
         const resp = await m.sendRequest(
           msgs as never,
           { tools: options.tools as never, toolMode: options.toolMode as never, modelOptions: options.modelOptions },
-          token as unknown as vscode.CancellationToken
+          lmToken
         );
         return { stream: resp.stream as AsyncIterable<import('./transport/proxyTransport').ChatPartLike> };
       },
