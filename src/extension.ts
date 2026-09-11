@@ -23,7 +23,23 @@ let config: RouterConfig;
 let secretRefs: string[] = [];
 let activeContext: vscode.ExtensionContext;
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  // GCMP companion: the model vendors we delegate to are all registered by
+  // vicanent.gcmp. Without it, the extension is inert — bail out with an
+  // install prompt instead of registering an empty provider.
+  const gcmp = vscode.extensions.getExtension('vicanent.gcmp');
+  if (!gcmp) {
+    const install = await vscode.window.showErrorMessage(
+      'Fallback Router chains need the GCMP extension (vicanent.gcmp) to provide model vendors. Install GCMP and reload the window.',
+      '去安装 GCMP'
+    );
+    if (install) {
+      await vscode.commands.executeCommand('workbench.extensions.search', 'vicanent.gcmp');
+    }
+    return;
+  }
+  if (!gcmp.isActive) await gcmp.activate();
+
   activeContext = context;
   logger = new OutputLogger(() => loadAllSecrets());
   statusBar = new StatusBar();
@@ -81,8 +97,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('fallbackrouter.manage', () => manage()),
     vscode.commands.registerCommand('fallbackrouter.apply', () => applyChains()),
     vscode.commands.registerCommand('fallbackrouter.warmup', () => warmup()),
-    vscode.commands.registerCommand('fallbackrouter.setApiKey', () => setApiKey()),
-    vscode.commands.registerCommand('fallbackrouter.set-default-model', () => setDefaultModel()),
+        vscode.commands.registerCommand('fallbackrouter.set-default-model', () => setDefaultModel()),
     vscode.commands.registerCommand('fallbackrouter.showDiagnostics', () => showDiagnostics()),
     vscode.commands.registerCommand('fallbackrouter.cleanup', () => cleanup(context))
   );
