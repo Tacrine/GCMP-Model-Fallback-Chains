@@ -94,9 +94,9 @@ describe('HttpTransport', () => {
 
   it('assembles two parallel tool calls without mixing', async () => {
     const emitted: LangPart[] = [];
-    const mk = (id: string, name: string) => sseFrame(`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"${id}","function":{"name":"${name}","arguments":"{\\"a\\":1}"}}]}}]}`);
+    const mk = (id: string, name: string, index: number) => sseFrame(`{"choices":[{"delta":{"tool_calls":[{"index":${index},"id":"${id}","function":{"name":"${name}","arguments":"{\\"a\\":1}"}}]}}]}`);
     const done = sseFrame('{"choices":[{"finish_reason":"stop"}]}');
-    const t = makeTransport(async () => makeResponse(200, [mk('c1', 'read'), mk('c2', 'write'), done]));
+    const t = makeTransport(async () => makeResponse(200, [mk('c1', 'read', 0), mk('c2', 'write', 1), done]));
     await t.send(httpTarget(), [{ role: 1, parts: [{ kind: 'text', value: 'q' }] }], { timeouts: { connectMs: 100, headersMs: 100, firstByteMs: 2000, stallMs: 2000 } }, (p) => emitted.push(p), cancelToken());
     const calls = emitted.filter((p) => p.kind === 'toolCall');
     expect(calls).toHaveLength(2);

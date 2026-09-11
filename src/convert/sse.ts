@@ -60,10 +60,15 @@ export function chatCompletionsDelta(data: string): ParsedDelta | null {
   }
   if (delta.tool_calls && delta.tool_calls.length) {
     const tc = delta.tool_calls[0];
-    const idx = typeof tc.index === 'number' ? tc.index : 0;
+    // Key by index when present (OpenAI sends index on every fragment but the
+    // id only on the first) so argument fragments stay in one bucket; fall
+    // back to the id, then a single-call bucket.
+    const hasIndex = typeof tc.index === 'number';
+    const idx = hasIndex ? tc.index : 0;
+    const key = hasIndex ? `idx:${idx}` : tc.id ? `id:${tc.id}` : `idx:${idx}`;
     return {
       chunk: {
-        key: tc.id ? `id:${tc.id}` : `idx:${idx}`,
+        key,
         callId: tc.id,
         name: tc.function && tc.function.name,
         argumentsFrag: (tc.function && tc.function.arguments) || '',

@@ -71,6 +71,23 @@ describe('chatCompletionsDelta', () => {
     const d = chatCompletionsDelta('{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"read","arguments":"{}"}}]}}]}');
     expect(d?.chunk?.callId).toBe('c1');
     expect(d?.chunk?.name).toBe('read');
+    expect(d?.chunk?.key).toBe('idx:0');
+  });
+
+  it('keys by stable index when id is absent from later fragments (OpenAI style)', () => {
+    const first = chatCompletionsDelta('{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":"{\\"pa"}}]}}]}');
+    const second = chatCompletionsDelta('{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\\":\\"a.txt\\"}"}}]}}]}');
+    expect(first?.chunk?.key).toBe('idx:0');
+    expect(second?.chunk?.key).toBe('idx:0');
+    const a = new ToolCallAssembler();
+    a.feed(first!.chunk);
+    a.feed(second!.chunk);
+    a.markDone();
+    const out = a.flush();
+    expect(out).toHaveLength(1);
+    expect(out[0].callId).toBe('call_1');
+    expect(out[0].name).toBe('read');
+    expect(JSON.parse(out[0].arguments)).toEqual({ path: 'a.txt' });
   });
   it('returns done on finish_reason', () => {
     const d = chatCompletionsDelta('{"choices":[{"finish_reason":"stop"}]}');
