@@ -104,7 +104,7 @@
     "build": "node esbuild.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "qa:faults": "node test/qa/faults.mjs",
+    "qa:faults": "node esbuild.js --qa && node test/qa/faults.bundle.mjs",
     "package": "vsce package"
   },
   "devDependencies": {

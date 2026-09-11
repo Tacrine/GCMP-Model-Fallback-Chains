@@ -5,3 +5,5 @@ dist/
 .vscode-test/
 coverage/
 spike/
+
+test/qa/*.bundle.mjs
