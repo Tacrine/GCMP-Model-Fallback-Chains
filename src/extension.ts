@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import { normalizeConfig, ConfigSink } from './config';
+import { normalizeConfig, extractLegacySecretRefs, ConfigSink } from './config';
 import type { RouterConfig, Chain, Target, ProxyTarget } from './types';
 import { FallbackRouterProvider } from './provider';
 import { OutputLogger, StatusBar } from './observability';
 import { importGcmp, GcmpEntry } from './import/importer';
-import { HttpTransport } from './transport/httpTransport';
 import { redact } from './util/redact';
 
 const VENDOR = 'fallbackrouter';
@@ -57,7 +56,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     statusBar,
   });
-  provider.refresh();
+    void provider.refresh();
   context.subscriptions.push(provider);
 
   context.subscriptions.push(
@@ -66,7 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (e.affectsConfiguration('fallbackRouter')) {
         config = loadConfig();
         logger.setLevel(config.logLevel);
-        provider.refresh();
+          void provider.refresh();
       }
     })
   );
@@ -89,7 +88,28 @@ let knownSecrets: string[] = [];
 function loadConfig(): RouterConfig {
   const raw = vscode.workspace.getConfiguration('fallbackRouter');
   const result = normalizeConfig(raw, new Sink(logger));
+  captureLegacyHttpRefs(raw);
+  if (result.droppedHttpTargets > 0) void showMigrationNotice(result.droppedHttpTargets);
   return result.config;
+}
+
+/** Legacy http targets carried API-key secretRefs that no longer resolve.
+   * Capture them (overwrite on each load) so cleanup() can purge leftover
+   * secrets even after normalization strips the targets from the config. */
+function captureLegacyHttpRefs(raw: vscode.WorkspaceConfiguration): void {
+  const refs = extractLegacySecretRefs(raw.get<unknown>('chains'));
+  if (refs.length > 0) void activeContext.globalState.update('legacySecretRefs', refs);
+}
+
+/** One-time migration banner — shown until migrated.strippedAt is recorded. */
+async function showMigrationNotice(dropped: number): Promise<void> {
+  if (activeContext.globalState.get<number>('migrated.strippedAt') !== undefined) return;
+  const choice = await vscode.window.showInformationMessage(
+    `Fallback Router removed ${dropped} legacy http target(s): this GCMP companion routes through proxy targets and GCMP manages provider keys. Re-import chains from GCMP to continue.`,
+    '重新导入'
+  );
+  if (choice === '重新导入') void importGcmpFlow();
+  void activeContext.globalState.update('migrated.strippedAt', Date.now());
 }
 
 function registerCommands(context: vscode.ExtensionContext): void {
@@ -136,25 +156,12 @@ async function manage(): Promise<void> {
 }
 
 async function addTarget(chain: Chain): Promise<void> {
-  const kind = await vscode.window.showQuickPick(['http', 'proxy'], { title: 'Target kind' });
-  if (!kind) return;
   const updated = { ...chain, targets: [...chain.targets] };
-  if (kind === 'http') {
-    const baseUrl = await vscode.window.showInputBox({ prompt: 'baseUrl', value: 'https://host/v1' });
-    if (!baseUrl) return;
-    const model = await vscode.window.showInputBox({ prompt: 'model' });
-    if (!model) return;
-    const secretRef = await vscode.window.showInputBox({ prompt: 'secretRef (key name)', value: `gcmp.${model}` });
-    if (!secretRef) return;
-    const apiType = await vscode.window.showQuickPick(['chat-completions', 'responses'], { title: 'apiType' });
-    updated.targets.push({ kind: 'http', baseUrl, model, secretRef, apiType: (apiType ?? 'chat-completions') as 'chat-completions' | 'responses' });
-  } else {
-    const vendor = await vscode.window.showInputBox({ prompt: 'proxy vendor (e.g. gcmp.compatible)' });
-    if (!vendor) return;
-    const modelId = await vscode.window.showInputBox({ prompt: 'proxy modelId' });
-    if (!modelId) return;
-    updated.targets.push({ kind: 'proxy', vendor, modelId });
-  }
+  const vendor = await vscode.window.showInputBox({ prompt: 'proxy vendor (e.g. gcmp.compatible)' });
+  if (!vendor) return;
+  const modelId = await vscode.window.showInputBox({ prompt: 'proxy modelId' });
+  if (!modelId) return;
+  updated.targets.push({ kind: 'proxy', vendor, modelId });
   await writeChains(config.chains.map((c) => (c.id === chain.id ? updated : c)));
 }
 
@@ -183,15 +190,37 @@ async function testTarget(chain: Chain): Promise<void> {
   const picked = await vscode.window.showQuickPick(picks, { title: 'Select target to test' });
   if (picked === undefined) return;
   const target = chain.targets[picked.index];
+  if (target.kind !== 'proxy') return;
+  const label = targetLabel(target);
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing target...' }, async () => {
-    if (target.kind === 'http') {
-      const t = new HttpTransport({ logger, getSecret: async (r) => activeContext.secrets.get(SECRET_PREFIX + r), secretsToRedact: () => Promise.resolve(secretRefs) });
-      const r = await t.probe(target);
-      const msg = `${targetLabel(target)}: ${r.ok ? 'ok' : 'failed'} — ${r.message} (firstByte ${r.firstByteMs}ms, toolCalling=${r.toolCalling})`;
+    try {
+      const models = await vscode.lm.selectChatModels({ vendor: target.vendor, id: target.modelId });
+      const m = models.find((x) => x.vendor === target.vendor && x.id === target.modelId);
+      if (!m) throw new Error('model not resolvable');
+      // Disposable-shaped token (platform requires a dispose() on cleanup).
+      const token: vscode.CancellationToken = {
+        isCancellationRequested: false,
+        onCancellationRequested: () => ({ dispose() { /* no-op */ } }),
+      };
+      const t0 = Date.now();
+            const response = await m.sendRequest(
+              [{ role: vscode.LanguageModelChatMessageRole.User, name: 'user', content: [new vscode.LanguageModelTextPart('ping')] }],
+              {},
+              token
+            );
+      let firstByteMs: number | undefined;
+      let text = '';
+      for await (const fragment of response.text) {
+        if (firstByteMs === undefined) firstByteMs = Date.now() - t0;
+        text += fragment;
+      }
+      const msg = `${label}: ok (firstByte ${firstByteMs}ms, text ${JSON.stringify(text.slice(0, 60))})`;
       logger.info(`[test] ${msg}`);
       void vscode.window.showInformationMessage(msg);
-    } else {
-      void vscode.window.showInformationMessage(`Proxy target ${target.vendor}/${target.modelId}: run warmup to test`);
+    } catch (e) {
+      const msg = `${label}: failed — ${e instanceof Error ? e.message : String(e)}`;
+      logger.info(`[test] ${msg}`);
+      void vscode.window.showErrorMessage(msg);
     }
   });
 }
@@ -292,25 +321,6 @@ async function warmup(): Promise<void> {
   }
 }
 
-async function setApiKey(): Promise<void> {
-  const httpTargets: { chain: Chain; target: Target }[] = [];
-  for (const c of config.chains) for (const t of c.targets) if (t.kind === 'http') httpTargets.push({ chain: c, target: t });
-  if (httpTargets.length === 0) {
-    void vscode.window.showInformationMessage('No http targets configured.');
-    return;
-  }
-  const picks = httpTargets.map((x) => ({ label: targetLabel(x.target), ref: x.target.kind === 'http' ? x.target.secretRef : '' }));
-  const picked = await vscode.window.showQuickPick(picks, { title: 'Select target to set API key' });
-  if (!picked) return;
-  const key = await vscode.window.showInputBox({ prompt: 'API key (stored in SecretStorage)', password: true });
-  if (key === undefined || key === '') return;
-  await activeContext.secrets.store(SECRET_PREFIX + picked.ref, key);
-  if (!secretRefs.includes(picked.ref)) secretRefs.push(picked.ref);
-  if (key.length >= 4 && !knownSecrets.includes(key)) knownSecrets.push(key);
-  void vscode.window.showInformationMessage(`API key stored for ${picked.ref}`);
-  await refreshSecrets();
-}
-
 async function setDefaultModel(): Promise<void> {
   const models = provider.getChains();
   const picks = [...models.values()].map(({ chain, info }) => ({ label: info.name, chain }));
@@ -360,10 +370,19 @@ async function cleanup(context: vscode.ExtensionContext): Promise<void> {
     'Delete'
   );
   if (confirm !== 'Delete') return;
-  // SecretStorage has no enumeration API; delete keys for configured http targets + tracked refs.
+  // SecretStorage has no enumeration API; delete tracked refs (legacy http
+  // target refs captured during config loads) + already-known secret values.
   const refs = new Set<string>(secretRefs);
-  for (const c of config.chains) for (const t of c.targets) if (t.kind === 'http') refs.add(t.secretRef);
-  for (const ref of refs) await Promise.resolve(context.secrets.delete(SECRET_PREFIX + ref)).catch(() => {});
+  const legacy = activeContext.globalState.get<string[]>('legacySecretRefs', []);
+  for (const ref of legacy) refs.add(ref);
+  for (const ref of refs) {
+    const key = SECRET_PREFIX + ref;
+    try {
+      const v = await context.secrets.get(key);
+      if (v) knownSecrets.push(v);
+    } catch { /* ignore */ }
+    await Promise.resolve(context.secrets.delete(key)).catch(() => { /* ignore */ });
+  }
   for (const k of context.globalState.keys()) {
     if (k.startsWith('fallbackrouter.')) await context.globalState.update(k, undefined);
   }
@@ -375,7 +394,7 @@ function openSettings(): Thenable<void> {
 }
 
 function targetLabel(t: Target): string {
-  return t.kind === 'http' ? `${t.model} @ ${t.baseUrl}` : `proxy ${t.vendor}/${t.modelId}`;
+  return `proxy ${t.vendor}/${t.modelId}`;
 }
 
 async function writeChains(chains: Chain[]): Promise<void> {

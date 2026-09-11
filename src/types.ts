@@ -4,34 +4,15 @@
  * and converters can be unit-tested without a VS Code runtime.
  */
 
-export type ApiType = 'chat-completions' | 'responses';
-
-export interface HttpTarget {
-  kind: 'http';
-  /** Base URL, e.g. https://host/v1 */
-  baseUrl: string;
-  apiType: ApiType;
-  /** Upstream model identifier, passed verbatim. */
-  model: string;
-  /** Reference name for the API key stored in SecretStorage under `fallbackrouter.<secretRef>`. */
-  secretRef: string;
-  maxInputTokens?: number;
-  maxOutputTokens?: number;
-  toolCalling?: boolean;
-  imageInput?: boolean;
-  customHeader?: Record<string, string>;
-  modelsEndpoint?: string;
-}
-
-export interface ProxyTarget {
+export type ProxyTarget = {
   kind: 'proxy';
   /** Vendor of the existing BYOK provider (e.g. gcmp.compatible). */
   vendor: string;
   /** Model id as resolvable via `selectChatModels`. */
   modelId: string;
-}
+};
 
-export type Target = HttpTarget | ProxyTarget;
+export type Target = ProxyTarget;
 
 export interface Chain {
   id: string;
@@ -44,7 +25,6 @@ export interface RouterConfig {
   chains: Chain[];
   retry: { maxAttempts: number; initialDelayMs: number; backoffFactor: number; maxDelayMs: number };
   circuitBreaker: { failureThreshold: number; cooldownMs: number };
-  timeouts: { connectMs: number; headersMs: number; firstByteMs: number; stallMs: number };
   maxTurnMs: number;
   maxTargetsPerTurn: number;
   importMode: 'family' | 'exact';
@@ -87,7 +67,6 @@ export interface SendOptions {
   tools?: readonly ToolDef[];
   toolMode?: ToolMode;
   modelOptions?: Record<string, unknown>;
-  timeouts: { connectMs: number; headersMs: number; firstByteMs: number; stallMs: number };
 }
 
 export type Cancel = { readonly isCancellationRequested: boolean; onCancellationRequested: (fn: () => void) => () => void };

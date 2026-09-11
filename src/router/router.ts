@@ -79,7 +79,7 @@ function sleep(ms: number, token: Cancel): Promise<boolean> {
 }
 
 function targetKey(t: Target): string {
-  return t.kind === 'proxy' ? `proxy:${t.vendor}/${t.modelId}` : `http:${t.baseUrl}/${t.model}`;
+  return `proxy:${t.vendor}/${t.modelId}`;
 }
 
 /** Fixed retryable classification table (from T1 empirical shape). */
@@ -181,23 +181,15 @@ export class FallbackRouter {
       const transport = this.deps.transports(target);
 
       // Static target-capability preflight (transport-agnostic).
-      const skip = (reason: string): void => {
-        attempts.push({
-          targetKey: key, ok: false, skippedReason: reason, attemptsMade: 0,
-          emittedParts: 0, emittedToolCall: false,
-        });
-        this.deps.logger.warn(`[router] skip ${key}: ${reason}`);
-      };
-      if (target.kind === 'http') {
-        if (needsTools && target.toolCalling === false) { skip('target does not support tool calling'); continue; }
-        if (hasDataParts && target.imageInput !== true) { skip('target does not support image input'); continue; }
-        if (target.maxInputTokens !== undefined && msgTokenCount > target.maxInputTokens) {
-          skip(`input tokens ${msgTokenCount} exceed maxInputTokens ${target.maxInputTokens}`);
-          continue;
-        }
-      }
+            const skip = (reason: string): void => {
+              attempts.push({
+                targetKey: key, ok: false, skippedReason: reason, attemptsMade: 0,
+                emittedParts: 0, emittedToolCall: false,
+              });
+              this.deps.logger.warn(`[router] skip ${key}: ${reason}`);
+            };
 
-      // Transport preflight skip.
+            // Transport preflight skip.
       const handle = transport.canHandle(target, needsTools, hasDataParts, msgTokenCount);
       if (!handle.ok) {
         attempts.push({
@@ -310,7 +302,7 @@ export class FallbackRouter {
       const outcome = await transport.send(
         target,
         messages,
-        { tools: options.tools, toolMode: options.toolMode, timeouts: options.timeouts },
+              { tools: options.tools, toolMode: options.toolMode },
         (part) => {
           // Buffered: do not forward until first meaningful delta is received.
           if (isDelta(part)) firstDeltaSeen = true;

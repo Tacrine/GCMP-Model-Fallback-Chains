@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import type { RouterConfig, Chain, Target, LangMsg, Transport, Logger } from './types';
 import { FallbackRouter, RouterError, CancellationError } from './router/router';
 import { CircuitBreaker, StateStore } from './router/circuitBreaker';
-import { HttpTransport } from './transport/httpTransport';
 import { ProxyTransport, LmLike } from './transport/proxyTransport';
 import { fromVscodeMessages, toVscodePart } from './vscode-adapter';
 import { OutputLogger, StatusBar } from './observability';
@@ -33,6 +32,48 @@ export interface ProviderDeps {
   statusBar: StatusBar;
 }
 
+/** Metadata a chain target contributes to the composite capability merge. */
+export interface ResolvedModelMeta {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  /** Platform metadata when available (selectChatModels' LanguageModelChat does
+     * not expose capabilities on 1.137 — absent here means conservative). */
+  capabilities?: { toolCalling: boolean; imageInput: boolean };
+}
+
+/** Pure capability merge over resolvable proxy metadata (T3 / Metis #1):
+   * toolCalling = AND, imageInput = AND, token caps = chain min. Targets with
+   * no capability metadata fall back to conservative defaults: toolCalling
+   * stays true (never downgrade optimistically), imageInput false (don't claim
+   * image support we can't prove). */
+export function mergeChainCapabilities(resolved: ResolvedModelMeta[]): {
+  maxInputTokens: number;
+  maxOutputTokens: number;
+  toolCalling: boolean;
+  imageInput: boolean;
+} {
+  let minInput = Infinity;
+  let minOutput = Infinity;
+  let toolCalling = true;
+  let allImage = true;
+  for (const m of resolved) {
+    minInput = Math.min(minInput, m.maxInputTokens ?? Infinity);
+    minOutput = Math.min(minOutput, m.maxOutputTokens ?? Infinity);
+    if (m.capabilities) {
+      toolCalling = toolCalling && m.capabilities.toolCalling;
+      allImage = allImage && m.capabilities.imageInput;
+    } else {
+      allImage = false;
+    }
+  }
+  return {
+    maxInputTokens: isFinite(minInput) ? minInput : 128000,
+    maxOutputTokens: isFinite(minOutput) ? minOutput : 4096,
+    toolCalling,
+      imageInput: allImage && resolved.length > 0,
+  };
+}
+
 export class FallbackRouterProvider implements vscode.LanguageModelChatProvider {
   private models: vscode.LanguageModelChatInformation[] = [];
   private modelsByChain = new Map<string, { chain: Chain; info: vscode.LanguageModelChatInformation }>();
@@ -44,42 +85,53 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
 
   constructor(private readonly deps: ProviderDeps) {}
 
-  /** Build the in-memory model list from the current config. Call on config change. */
-  refresh(): void {
-    const cfg = this.deps.getConfig();
-    this.modelsByChain.clear();
-    const infos: vscode.LanguageModelChatInformation[] = [];
-    for (const chain of cfg.chains) {
-      let minInput = Infinity;
-      let minOutput = Infinity;
-      let toolCalling = false;
-      let allImage = true;
-      for (const t of chain.targets) {
-        if (t.kind === 'http') {
-          minInput = Math.min(minInput, t.maxInputTokens ?? Infinity);
-          minOutput = Math.min(minOutput, t.maxOutputTokens ?? Infinity);
-          toolCalling = toolCalling || t.toolCalling !== false;
-          allImage = allImage && t.imageInput === true;
-        }
-      }
-      if (chain.targets.length === 0) continue;
-      if (!isFinite(minInput)) minInput = 128000;
-      if (!isFinite(minOutput)) minOutput = 4096;
-      const info: vscode.LanguageModelChatInformation = {
-        id: `fallbackrouter:${chain.id}`,
-        name: `${chain.name} (fallback)`,
-        family: 'fallbackrouter',
-        version: '1',
-        maxInputTokens: minInput,
-        maxOutputTokens: minOutput,
-        capabilities: { toolCalling, imageInput: allImage && chain.targets.length > 0 },
-      };
-      infos.push(info);
-      this.modelsByChain.set(`fallbackrouter:${chain.id}`, { chain, info });
+  /** Build the in-memory model list from the current config, merging real
+     * capabilities from live vscode.lm metadata (proxy-only chains). Old models
+     * are kept until the merged set is complete (no flash/empty window).
+     *
+     * Capability merge (T3, Metis #1): toolCalling = AND, imageInput = AND,
+     * token caps = chain min. Unresolvable models fall back to conservative
+     * defaults (toolCalling stays true — never downgrade optimistically;
+     * imageInput false — don't claim image support we can't prove).
+     */
+    async refresh(): Promise<void> {
+      const cfg = this.deps.getConfig();
+      const nextByChain = new Map<string, { chain: Chain; info: vscode.LanguageModelChatInformation }>();
+      const nextInfos: vscode.LanguageModelChatInformation[] = [];
+      await Promise.all(
+        cfg.chains.map(async (chain) => {
+          const resolved: ResolvedModelMeta[] = [];
+          for (const t of chain.targets) {
+            if (t.kind !== 'proxy') continue;
+            try {
+              const models = await vscode.lm.selectChatModels({ vendor: t.vendor, id: t.modelId });
+              const m = models.find((x) => x.vendor === t.vendor && x.id === t.modelId);
+              if (!m) continue; // Unresolvable: conservative defaults handle it.
+              resolved.push({ maxInputTokens: m.maxInputTokens });
+            } catch {
+              // Per-model failure → conservative defaults for that target.
+            }
+          }
+          if (chain.targets.length === 0) return;
+          const caps = mergeChainCapabilities(resolved);
+          const info: vscode.LanguageModelChatInformation = {
+            id: `fallbackrouter:${chain.id}`,
+            name: `${chain.name} (fallback)`,
+            family: 'fallbackrouter',
+            version: '1',
+            maxInputTokens: caps.maxInputTokens,
+            maxOutputTokens: caps.maxOutputTokens,
+            capabilities: { toolCalling: caps.toolCalling, imageInput: caps.imageInput },
+          };
+          nextInfos.push(info);
+          nextByChain.set(`fallbackrouter:${chain.id}`, { chain, info });
+        })
+      );
+      // Swap only after the full merge completes (no flash/empty window).
+      this.modelsByChain = nextByChain;
+      this.models = nextInfos;
+      this.emitter.fire();
     }
-    this.models = infos;
-    this.emitter.fire();
-  }
 
   async provideLanguageModelChatInformation(
     options: { silent?: boolean },
@@ -108,9 +160,8 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
     const langOptions = {
       tools: (opts.tools ?? []) as never[],
       toolMode: (opts.toolMode ?? 'auto') as never,
-      timeouts: cfg.timeouts,
-      modelOptions: undefined,
-    };
+            modelOptions: undefined,
+          };
 
     const router = new FallbackRouter({
       transports: (t) => this.transportFor(t),
@@ -169,16 +220,9 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
   }
 
   private transportFor(t: Target): Transport {
-    if (t.kind === 'http') {
-      return new HttpTransport({
+      return new ProxyTransport({
         logger: this.deps.logger,
-        getSecret: async (ref) => this.deps.secrets.get(`fallbackrouter.${ref}`),
-        secretsToRedact: () => this.deps.getSecretsProvider()(),
-      });
-    }
-    return new ProxyTransport({
-      logger: this.deps.logger,
-      lm: lmAdapter,
+        lm: lmAdapter,
         // Inverse of fromVscodeMessages: vscode.lm rejects plain LangMsg objects
         // (platform validates message shape before dispatch; T1 spike found
         // identity passthrough -> LanguageModelError NotFound in 3ms).
