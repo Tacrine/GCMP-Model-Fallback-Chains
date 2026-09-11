@@ -6,7 +6,7 @@
   "publisher": "local-dev",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.106"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "AI",
@@ -105,7 +105,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "qa:faults": "node esbuild.js --qa && node test/qa/faults.bundle.mjs",
-    "package": "vsce package"
+    "package": "vsce package --baseContentUrl https://example.invalid --baseImagesUrl https://example.invalid"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
