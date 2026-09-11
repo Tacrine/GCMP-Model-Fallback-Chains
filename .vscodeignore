@@ -1,0 +1,10 @@
+.vscode/**
+src/**
+test/**
+out/**
+node_modules/**
+.omo/**
+*.vsix
+.git/**
+coverage/**
+**/*.map

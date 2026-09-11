@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.vsix
+.omo/
+.vscode-test/
+coverage/
+spike/

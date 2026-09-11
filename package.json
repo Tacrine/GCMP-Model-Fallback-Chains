@@ -1,0 +1,119 @@
+{
+  "name": "copilot-model-fallback",
+  "displayName": "Copilot Model Fallback Router",
+  "description": "Composite language models with automatic cross-provider fallback for Copilot Chat, so agent sessions survive transient relay outages.",
+  "version": "0.1.0",
+  "publisher": "local-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.106"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "fallback",
+    "language-model",
+    "router",
+    "ai"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguageModelChatProvider:fallbackrouter"
+  ],
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "fallbackrouter",
+        "displayName": "Fallback Router",
+        "managementCommand": "fallbackrouter.manage"
+      }
+    ],
+    "commands": [
+      { "command": "fallbackrouter.manage", "title": "Fallback Router: Manage" },
+      { "command": "fallbackrouter.apply", "title": "Fallback Router: Apply imported chains" },
+      { "command": "fallbackrouter.warmup", "title": "Fallback Router: Warm up proxy targets" },
+      { "command": "fallbackrouter.setApiKey", "title": "Fallback Router: Set API Key for target" },
+      { "command": "fallbackrouter.set-default-model", "title": "Fallback Router: Set default model" },
+      { "command": "fallbackrouter.showDiagnostics", "title": "Fallback Router: Show diagnostics" },
+      { "command": "fallbackrouter.cleanup", "title": "Fallback Router: Clean up stored data" }
+    ],
+    "configuration": {
+      "title": "Fallback Router",
+      "properties": {
+        "fallbackRouter.chains": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Composite model chains. Each chain is an ordered list of targets tried in sequence on failure."
+        },
+        "fallbackRouter.retry": {
+          "type": "object",
+          "default": { "maxAttempts": 3, "initialDelayMs": 1000, "backoffFactor": 2, "maxDelayMs": 15000 },
+          "markdownDescription": "Per-target retry policy."
+        },
+        "fallbackRouter.circuitBreaker": {
+          "type": "object",
+          "default": { "failureThreshold": 3, "cooldownMs": 60000 },
+          "markdownDescription": "Per-target circuit breaker."
+        },
+        "fallbackRouter.timeouts": {
+          "type": "object",
+          "default": { "connectMs": 10000, "headersMs": 15000, "firstByteMs": 60000, "stallMs": 120000 },
+          "markdownDescription": "Wall-clock budgets for HTTP transport stages."
+        },
+        "fallbackRouter.maxTurnMs": {
+          "type": "number",
+          "default": 600000,
+          "markdownDescription": "Whole-chain wall-clock deadline."
+        },
+        "fallbackRouter.maxTargetsPerTurn": {
+          "type": "number",
+          "default": 5,
+          "markdownDescription": "Max targets tried per turn."
+        },
+        "fallbackRouter.importMode": {
+          "type": "string",
+          "enum": ["family", "exact"],
+          "default": "family",
+          "markdownDescription": "GCMP import grouping mode."
+        },
+        "fallbackRouter.retryOnRateLimit": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Treat rateLimited/quotaExceeded as retryable."
+        },
+        "fallbackRouter.noticeStyle": {
+          "type": "string",
+          "enum": ["markdown", "plain"],
+          "default": "markdown",
+          "markdownDescription": "Style of visible mid-stream switch notices."
+        },
+        "fallbackRouter.logLevel": {
+          "type": "string",
+          "enum": ["off", "error", "info", "debug"],
+          "default": "info",
+          "markdownDescription": "Output channel log level."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node esbuild.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "qa:faults": "node test/qa/faults.mjs",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.106.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
