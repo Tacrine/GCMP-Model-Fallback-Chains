@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "local-dev",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tacrine/copilot-model-fallback.git"
+  },
   "engines": {
     "vscode": "^1.106.0"
   },
@@ -105,7 +109,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "qa:faults": "node esbuild.js --qa && node test/qa/faults.bundle.mjs",
-    "package": "vsce package --baseContentUrl https://example.invalid --baseImagesUrl https://example.invalid"
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
