@@ -1,6 +1,6 @@
 # 配置参考（Configuration Reference）
 
-本文档是 `copilot-model-fallback`（GCMP Model Fallback Chains）的完整配置字段参考。所有键均属于 `contributes.configuration`，在 VS Code 设置中以 `fallbackRouter.*` 前缀出现；默认值来自 `package.json` 与 `src/config.ts` 中的 `normalizeConfig`。
+本文档是 `gcmp-model-fallback-chains`（GCMP Model Fallback Chains）的完整配置字段参考。所有键均属于 `contributes.configuration`，在 VS Code 设置中以 `fallbackRouter.*` 前缀出现；默认值来自 `package.json` 与 `src/config.ts` 中的 `normalizeConfig`。
 
 > 本扩展是 **GCMP 的附属拓展**：模型与密钥都由 [vicanent.gcmp](https://marketplace.visualstudio.com/items?itemName=vicanent.gcmp) 提供。本扩展**不再管理任何 API key**——链上的每个目标都是 `proxy` 目标，运行时通过 `vscode.lm.selectChatModels` 委托给 GCMP 已注册的供应商。
 >

@@ -72,7 +72,7 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "file=copilot-model-fallback-${VERSION}.vsix" >> "$GITHUB_OUTPUT"
+          echo "file=gcmp-model-fallback-chains-${VERSION}.vsix" >> "$GITHUB_OUTPUT"
           echo "Tag: $TAG  Version: $VERSION"
 
       - name: Package VSIX

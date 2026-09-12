@@ -23,7 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-const EXT_ID = 'local-dev.copilot-model-fallback';
+const EXT_ID = 'tacrine.gcmp-model-fallback-chains';
 const ECHO_VENDOR = 'spike-test';
 const ECHO_MODEL = 'echo-1';
 const CHAIN_ID = 'spike';

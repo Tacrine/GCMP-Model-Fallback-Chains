@@ -46,7 +46,7 @@ A VS Code extension that chains **concrete per-vendor models** (provided by the 
 
 ## 安装
 
-1. 安装本扩展（`copilot-model-fallback`）。
+1. 安装本扩展（`gcmp-model-fallback-chains`）。
 2. **先安装 GCMP**：本扩展声明了 `extensionDependencies: ["vicanent.gcmp"]`，并在引擎下限要求 VS Code ≥ 1.125。**如果 GCMP 未安装**，本扩展激活时会弹出错误提示并引导你安装 GCMP。
 3. 在 **GCMP 的密钥配置**中录入各供应商的 API key（本扩展不接触任何 key）。
 4. GCMP 版本要求：**≥ 0.28.x**。升级 GCMP 后请复核兼容性（见下文「命名兼容与升级复核」）。

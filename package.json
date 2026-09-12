@@ -1,5 +1,5 @@
 {
-  "name": "copilot-model-fallback",
+  "name": "gcmp-model-fallback-chains",
   "displayName": "GCMP Model Fallback Chains",
   "description": "GCMP companion extension: composite language models with automatic cross-provider fallback for Copilot Chat, delegating model calls to GCMP-registered vendors.",
   "version": "0.1.0",
@@ -8,6 +8,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Tacrine/GCMP-Model-Fallback-Chains.git"
+  },
+  "homepage": "https://github.com/Tacrine/GCMP-Model-Fallback-Chains",
+  "bugs": {
+    "url": "https://github.com/Tacrine/GCMP-Model-Fallback-Chains/issues"
   },
   "engines": {
     "vscode": "^1.125.0"
