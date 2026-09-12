@@ -3,7 +3,7 @@
   "displayName": "GCMP Companion: Model Fallback Chains",
   "description": "GCMP companion extension: composite language models with automatic cross-provider fallback for Copilot Chat, delegating model calls to GCMP-registered vendors.",
   "version": "0.1.0",
-  "publisher": "local-dev",
+  "publisher": "tacrine",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -43,12 +43,30 @@
       }
     ],
     "commands": [
-      { "command": "fallbackrouter.manage", "title": "Fallback Router: Manage" },
-            { "command": "fallbackrouter.apply", "title": "Fallback Router: Apply imported chains" },
-            { "command": "fallbackrouter.warmup", "title": "Fallback Router: Warm up proxy targets" },
-            { "command": "fallbackrouter.set-default-model", "title": "Fallback Router: Set default model" },
-      { "command": "fallbackrouter.showDiagnostics", "title": "Fallback Router: Show diagnostics" },
-      { "command": "fallbackrouter.cleanup", "title": "Fallback Router: Clean up stored data" }
+      {
+        "command": "fallbackrouter.manage",
+        "title": "Fallback Router: Manage"
+      },
+      {
+        "command": "fallbackrouter.apply",
+        "title": "Fallback Router: Apply imported chains"
+      },
+      {
+        "command": "fallbackrouter.warmup",
+        "title": "Fallback Router: Warm up proxy targets"
+      },
+      {
+        "command": "fallbackrouter.set-default-model",
+        "title": "Fallback Router: Set default model"
+      },
+      {
+        "command": "fallbackrouter.showDiagnostics",
+        "title": "Fallback Router: Show diagnostics"
+      },
+      {
+        "command": "fallbackrouter.cleanup",
+        "title": "Fallback Router: Clean up stored data"
+      }
     ],
     "configuration": {
       "title": "Fallback Router",
@@ -60,19 +78,27 @@
         },
         "fallbackRouter.retry": {
           "type": "object",
-          "default": { "maxAttempts": 3, "initialDelayMs": 1000, "backoffFactor": 2, "maxDelayMs": 15000 },
+          "default": {
+            "maxAttempts": 3,
+            "initialDelayMs": 1000,
+            "backoffFactor": 2,
+            "maxDelayMs": 15000
+          },
           "markdownDescription": "Per-target retry policy."
         },
         "fallbackRouter.circuitBreaker": {
           "type": "object",
-          "default": { "failureThreshold": 3, "cooldownMs": 60000 },
+          "default": {
+            "failureThreshold": 3,
+            "cooldownMs": 60000
+          },
           "markdownDescription": "Per-target circuit breaker."
         },
         "fallbackRouter.maxTurnMs": {
-                  "type": "number",
-                  "default": 600000,
-                  "markdownDescription": "Whole-chain wall-clock deadline."
-                },
+          "type": "number",
+          "default": 600000,
+          "markdownDescription": "Whole-chain wall-clock deadline."
+        },
         "fallbackRouter.maxTargetsPerTurn": {
           "type": "number",
           "default": 5,
@@ -80,7 +106,10 @@
         },
         "fallbackRouter.importMode": {
           "type": "string",
-          "enum": ["family", "exact"],
+          "enum": [
+            "family",
+            "exact"
+          ],
           "default": "family",
           "markdownDescription": "GCMP import grouping mode."
         },
@@ -91,13 +120,21 @@
         },
         "fallbackRouter.noticeStyle": {
           "type": "string",
-          "enum": ["markdown", "plain"],
+          "enum": [
+            "markdown",
+            "plain"
+          ],
           "default": "markdown",
           "markdownDescription": "Style of visible mid-stream switch notices."
         },
         "fallbackRouter.logLevel": {
           "type": "string",
-          "enum": ["off", "error", "info", "debug"],
+          "enum": [
+            "off",
+            "error",
+            "info",
+            "debug"
+          ],
           "default": "info",
           "markdownDescription": "Output channel log level."
         }
