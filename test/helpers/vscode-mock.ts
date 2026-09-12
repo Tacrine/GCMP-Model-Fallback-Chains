@@ -50,7 +50,46 @@ export const window = {
     get tooltip() { return statusSink.tooltip; },
     name: 'Fallback Router',
   }),
+  showInformationMessage: async (): Promise<unknown> => undefined,
+  showWarningMessage: async (): Promise<unknown> => undefined,
+  showErrorMessage: async (): Promise<unknown> => undefined,
+  showQuickPick: async (): Promise<unknown> => undefined,
+  showInputBox: async (): Promise<unknown> => undefined,
+  withProgress: async (_o: unknown, task: () => Promise<unknown>): Promise<unknown> => task(),
 };
+
+export const workspace = {
+  getConfiguration: () => ({
+    get: (): unknown => undefined,
+    update: async (): Promise<void> => {},
+    inspect: (): unknown => undefined,
+  }),
+  onDidChangeConfiguration: (): { dispose: () => void } => ({ dispose() {} }),
+  openTextDocument: async (): Promise<unknown> => ({}),
+  showTextDocument: async (): Promise<unknown> => ({}),
+};
+
+export const commands = {
+  executeCommand: async (): Promise<unknown> => undefined,
+  registerCommand: (): { dispose: () => void } => ({ dispose() {} }),
+};
+
+export const extensions = {
+  getExtension: (): undefined => undefined,
+};
+
+export const env = {
+  clipboard: {
+    readText: async (): Promise<string> => '',
+    writeText: async (): Promise<void> => {},
+  },
+};
+
+export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+
+export const LanguageModelChatMessageRole = { User: 1, Assistant: 2, System: 3 };
+
+export const Uri = { parse: (s: string): unknown => s };
 
 export function __resetSinks(): void { channelSink = []; statusSink = { text: '', tooltip: '' }; }
 export function __channelLines(): string[] { return channelSink; }

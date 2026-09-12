@@ -3,7 +3,7 @@ import { normalizeConfig, extractLegacySecretRefs, ConfigSink } from './config';
 import type { RouterConfig, Chain, Target, ProxyTarget } from './types';
 import { FallbackRouterProvider } from './provider';
 import { OutputLogger, StatusBar } from './observability';
-import { importGcmp, GcmpEntry } from './import/importer';
+import { importFromLm, type LmModelLike } from './import/importer';
 
 const VENDOR = 'fallbackrouter';
 const SECRET_PREFIX = 'fallbackrouter.';
@@ -224,25 +224,56 @@ async function testTarget(chain: Chain): Promise<void> {
   });
 }
 
-async function importGcmpFlow(): Promise<void> {
-  const cfg = vscode.workspace.getConfiguration('gcmp');
-  const models = cfg.get<GcmpEntry[]>('compatibleModels', []);
-  if (models.length === 0) {
-    void vscode.window.showWarningMessage('No gcmp.compatibleModels found.');
+/** Live GCMP vendor list declared by the vicanent.gcmp package. Used to reject
+ * 'gcmp.*'-prefix impostors (e.g. a hypothetical `gcmp-bridge` extension)
+ * whose vendors are not actually contributed by GCMP. */
+function declaredGcmpVendors(): Set<string> {
+  const gcmpExt = vscode.extensions.getExtension('vicanent.gcmp');
+  const providers = (gcmpExt?.packageJSON?.contributes?.languageModelChatProviders ?? []) as { vendor?: string }[];
+  const vendors = new Set<string>();
+  for (const p of providers) if (typeof p?.vendor === 'string' && p.vendor !== '') vendors.add(p.vendor);
+  return vendors;
+}
+
+/** Best-effort open of the GCMP setup surface (config/settings/provider command
+ * if GCMP contributes one, else settings.json). */
+async function openGcmpSetup(): Promise<void> {
+  const gcmpExt = vscode.extensions.getExtension('vicanent.gcmp');
+  const cmds = ((gcmpExt?.packageJSON?.contributes?.commands as { command?: string }[] | undefined) ?? [])
+    .map((c) => c?.command)
+    .filter((c): c is string => typeof c === 'string' && c.length > 0);
+  const target = cmds.find((c) => /config|setting|provider/i.test(c));
+  if (target) await vscode.commands.executeCommand(target);
+  else await vscode.commands.executeCommand('workbench.action.openSettingsJson');
+}
+
+export async function importGcmpFlow(): Promise<void> {
+  const declared = declaredGcmpVendors();
+  const all = await vscode.lm.selectChatModels({});
+  const live: LmModelLike[] = all.filter((m) => m.vendor.startsWith('gcmp.') && declared.has(m.vendor));
+  if (live.length === 0) {
+    const choice = await vscode.window.showWarningMessage(
+      '未找到可用的 GCMP 供应商模型，请先配置 GCMP 供应商后重试。',
+      '打开配置'
+    );
+    if (choice === '打开配置') await openGcmpSetup();
     return;
   }
-  const mode = config.importMode;
-  const result = importGcmp(models, mode);
+  const mode = vscode.workspace.getConfiguration('fallbackRouter').get<'family' | 'exact'>('importMode', 'family');
+  const result = importFromLm(live, mode);
   for (const s of result.skipped) logger.warn(`[import] skipped ${s.entryId}: ${s.reason}`);
   if (result.chains.length === 0) {
-    void vscode.window.showErrorMessage('Import produced no valid chains.');
+    void vscode.window.showErrorMessage('未生成可用的代理链。');
     return;
   }
-  const json = JSON.stringify(result.chains, null, 2);
-  await vscode.env.clipboard.writeText(json);
-  const doc = await vscode.workspace.openTextDocument({ language: 'json', content: `// ${mode} mode: ${result.chains.length} chains / ${result.chains.reduce((a, c) => a + c.targets.length, 0)} targets\n// Copy this into fallbackRouter.chains, then run "Apply imported chains".\n${json}` });
-  await vscode.window.showTextDocument(doc);
-  void vscode.window.showInformationMessage('Chains generated and copied to clipboard.');
+  const ok = await writeImportChains(result.chains);
+  const summary = `从 GCMP 导入 ${result.chains.length} 条链 / ${result.chains.reduce((a, c) => a + c.targets.length, 0)} 个目标 (${mode} 模式)`;
+  if (ok) {
+      logger?.info(`[import] ${summary}`);
+    void vscode.window.showInformationMessage(`${summary} — 已写入配置。`);
+  } else {
+    void vscode.window.showErrorMessage(`${summary} — 部分链无法解析，已回滚。`);
+  }
 }
 
 async function applyChains(): Promise<void> {
@@ -269,24 +300,34 @@ async function applyChains(): Promise<void> {
     'Apply'
   );
   if (confirm !== 'Apply') return;
-  const old = vscode.workspace.getConfiguration('fallbackRouter').get<Chain[]>('chains');
-  await vscode.workspace.getConfiguration('fallbackRouter').update('chains', chains, vscode.ConfigurationTarget.Global);
-  // Post-write loopback: wait for onDidChangeConfiguration to recompute, bounded.
-  const ok = await waitForModels(chains, 10000);
-  if (!ok) {
-    // Rollback.
-    if (old === undefined) {
-      await vscode.workspace.getConfiguration('fallbackRouter').update('chains', undefined, vscode.ConfigurationTarget.Global);
-    } else {
-      await vscode.workspace.getConfiguration('fallbackRouter').update('chains', old, vscode.ConfigurationTarget.Global);
+    const ok = await writeImportChains(chains);
+    if (!ok) {
+      void vscode.window.showErrorMessage('Some chains failed to resolve; rolled back.');
+      return;
     }
-    void vscode.window.showErrorMessage('Some chains failed to resolve; rolled back.');
-    return;
+    void vscode.window.showInformationMessage('Chains applied successfully.');
   }
-  void vscode.window.showInformationMessage('Chains applied successfully.');
-}
 
-async function waitForModels(chains: Chain[], timeoutMs: number): Promise<boolean> {
+  /** Directly write chains to fallbackRouter.chains (Global), then verify the
+   * provider picked them up via the waitForModels loopback, rolling back on
+   * failure. Shared by importGcmpFlow and applyChains. */
+  export async function writeImportChains(chains: Chain[], timeoutMs = 10000): Promise<boolean> {
+    const cfg = vscode.workspace.getConfiguration('fallbackRouter');
+    const old = cfg.get<Chain[]>('chains');
+    await cfg.update('chains', chains, vscode.ConfigurationTarget.Global);
+    // Post-write loopback: wait for onDidChangeConfiguration to recompute, bounded.
+    const ok = await waitForModels(chains, timeoutMs);
+    if (!ok) {
+      if (old === undefined) {
+        await cfg.update('chains', undefined, vscode.ConfigurationTarget.Global);
+      } else {
+        await cfg.update('chains', old, vscode.ConfigurationTarget.Global);
+      }
+    }
+    return ok;
+  }
+
+  export async function waitForModels(chains: Chain[], timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const models = await vscode.lm.selectChatModels({ vendor: VENDOR });
