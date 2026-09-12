@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Tacrine/copilot-model-fallback.git"
+    "url": "https://github.com/Tacrine/GCMP-Model-Fallback-Chains.git"
   },
   "engines": {
     "vscode": "^1.125.0"
