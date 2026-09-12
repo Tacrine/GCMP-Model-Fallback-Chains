@@ -93,7 +93,7 @@ jobs:
           fail_on_unmatched_files: true
 
       - name: Publish to VS Code Marketplace
-        if: ${{ secrets.VSCE_PAT != '' }}
+        if: env.VSCE_PAT != ''
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx vsce publish --no-dependencies -p "$VSCE_PAT" --packagePath "${{ steps.version.outputs.file }}"
