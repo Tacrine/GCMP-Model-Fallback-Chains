@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-09-14
+
+### Breaking changes
+- Now a **GCMP companion extension**: declared `extensionDependencies: ["vicanent.gcmp"]`, engine floor raised to VS Code ≥ 1.125. GCMP ≥ 0.28.x required.
+- **Deleted the HTTP transport** (`chat-completions`/`responses` native streaming, `src/transport/httpTransport.ts`, `src/convert/`). Every target is now a `proxy` target; legacy `http` targets are stripped on config load (counted in `droppedHttpTargets`) and re-import via **Manage → Import GCMP config** is required.
+- **Deleted `setApiKey`** (`fallbackrouter.setApiKey` command) and all key management: the extension no longer touches or stores any API key. Keys are configured in GCMP. `fallbackrouter.cleanup` now purges legacy `fallbackrouter.*` secrets captured during migration (reference list in globalState `legacySecretRefs`, idempotent) plus breaker state.
+- **Config changes**: `fallbackRouter.timeouts` removed along with the HTTP stack; `chains` targets accept `kind: "proxy"` only. `importMode` stays (`family` | `exact`).
+- **Import rewired**: Import GCMP config now reads **live** `vscode.lm.selectChatModels` results (intersection-filtered against GCMP's declared vendors, `fallbackrouter` vendor excluded) instead of static model lists, and writes `fallbackRouter.chains` directly with loopback verification and rollback.
+- **Capabilities merged live**: chain `maxInputTokens` / `toolCalling` / `imageInput` come from realtime chat-model metadata (conservative defaults when metadata is absent).
+
 ## [0.1.0] - 2026-09-11
 
 ### Added
