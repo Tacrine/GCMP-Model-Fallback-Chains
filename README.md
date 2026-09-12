@@ -1,4 +1,4 @@
-# GCMP Companion: Model Fallback Chains
+# GCMP Model Fallback Chains
 
 > 简体中文 · [English Summary](#english-summary)
 
