@@ -2,6 +2,7 @@
 src/**
 test/**
 out/**
+out-test/**
 node_modules/**
 .omo/**
 *.vsix

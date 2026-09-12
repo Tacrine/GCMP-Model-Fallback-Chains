@@ -1,6 +1,7 @@
-// T1 spike driver: boots VS Code stable with the extension under test and runs
-// out-test/spike.runner.js inside the extension host. Exit 0 = gate PASS,
-// non-zero = FAIL (runTests rejects when the CLI exit code is non-zero).
+// Driver for the extension-host runners: boots VS Code stable with the
+// extension under test and runs the requested runner (default: the T1 spike)
+// from out-test/ inside the extension host. Exit 0 = PASS, non-zero = FAIL
+// (runTests rejects when the CLI exit code is non-zero).
 'use strict';
 
 const fs = require('fs');
@@ -63,19 +64,20 @@ function ensureGcmpStub(launchPath) {
 
 (async () => {
   const repoRoot = path.resolve(__dirname, '..');
+  const runner = process.argv[2] || 'spike.runner.js';
   try {
     const launchPath = repoPathForLauncher(repoRoot);
     const stubExtRoot = ensureGcmpStub(launchPath);
     await runTests({
       version: 'stable',
       extensionDevelopmentPath: launchPath,
-      extensionTestsPath: path.join(launchPath, 'out-test', 'spike.runner.js'),
+      extensionTestsPath: path.join(launchPath, 'out-test', runner),
       launchArgs: ['--extensions-dir', stubExtRoot],
     });
-    console.log('spike runner completed (exit 0)');
+    console.log(`${runner} completed (exit 0)`);
     process.exit(0);
   } catch (e) {
-    console.error('spike harness failed:', e && e.message ? e.message : e);
+    console.error(`${runner} failed:`, e && e.message ? e.message : e);
     process.exit(1);
   }
 })();

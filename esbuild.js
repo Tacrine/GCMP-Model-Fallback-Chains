@@ -22,14 +22,14 @@ if (args.includes('--qa')) {
 }
 
 if (args.includes('--spike')) {
-  // T1 spike gate runner (extension-host). test/** is excluded from the VSIX,
-  // so nothing here ships in the extension. The runner runs inside the
-  // extension host, so 'vscode' must stay external; node builtins are
-  // external by default on platform 'node'.
+  // Extension-host gate runners (test/** is excluded from the VSIX, so nothing
+  // here ships in the extension). The runners run inside the extension host, so
+  // 'vscode' must stay external; node builtins are external by default on
+  // platform 'node'.
   esbuild.build({
-    entryPoints: ['test/e2e/spike.runner.ts'],
+    entryPoints: ['test/e2e/spike.runner.ts', 'test/e2e/manage-menu.runner.ts'],
     bundle: true,
-    outfile: 'out-test/spike.runner.js',
+    outdir: 'out-test',
     platform: 'node',
     target: 'node18',
     format: 'cjs',

@@ -157,8 +157,9 @@ v0.1.0 起本扩展**不再支持 `http` 目标**（HTTP 传输与密钥管理�
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit（src）
-npm test            # vitest run（单元测试；不含扩展宿主 spike）
+npm test            # vitest run（单元测试；不含扩展宿主 e2e）
 npm run test:e2e    # 扩展宿主 spike：嵌套 LM 委托门（@vscode/test-electron）
+npm run test:e2e:manage  # 扩展宿主 Manage 菜单端到端（脚本化 QuickPick/InputBox，见 .omo/evidence）
 npm run qa:faults   # 故障注入 QA bundle
 npm run package     # vsce package → .vsix
 ```

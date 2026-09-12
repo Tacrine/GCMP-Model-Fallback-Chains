@@ -152,6 +152,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node esbuild.js && node esbuild.js --spike && node scripts/run-spike.js",
+    "test:e2e:manage": "node esbuild.js && node esbuild.js --spike && node scripts/run-spike.js manage-menu.runner.js",
     "qa:faults": "node esbuild.js --qa && node test/qa/faults.bundle.mjs",
     "package": "vsce package"
   },
