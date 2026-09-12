@@ -20,7 +20,7 @@
 | `fallbackRouter.noticeStyle` | `string` | `markdown` | `markdown` \| `plain` | 中流切换（已输出文本后切换目标）时可见通知的样式。 |
 | `fallbackRouter.logLevel` | `string` | `info` | `off` \| `error` \| `info` \| `debug` | 输出面板（"Fallback Router"）日志级别；非法值回退 `info`。 |
 
-> `fallbackRouter.timeouts`（HTTP 传输墙钟预算）已随 HTTP 栈删除（v0.2.0）。代理委托的超时由 `maxTurnMs` 与上游提供商自身行为约束。
+> `fallbackRouter.timeouts`（HTTP 传输墙钟预算）已随 HTTP 栈删除（v0.1.0）。代理委托的超时由 `maxTurnMs` 与上游提供商自身行为约束。
 
 ### 默认值汇总（`src/config.ts`）
 
@@ -115,7 +115,7 @@ interface Chain {
 ]
 ```
 
-> **迁移提示**：v0.2.0 起不再支持 `http` 目标。旧配置中的 http 链会在加载时自动剥离并给出警告；请在 GCMP 中配置好密钥后，用 **Fallback Router: Manage → Import GCMP config** 重新导入生成代理链。
+> **迁移提示**：v0.1.0 起不再支持 `http` 目标。旧配置中的 http 链会在加载时自动剥离并给出警告；请在 GCMP 中配置好密钥后，用 **Fallback Router: Manage → Import GCMP config** 重新导入生成代理链。
 
 ## 5. GCMP 导入（`fallbackRouter.importMode` 与 `fallbackrouter.manage` → "Import GCMP config"）
 
@@ -140,7 +140,7 @@ interface Chain {
 | `fallbackrouter.showDiagnostics` | Fallback Router: Show diagnostics | 自检 + 链/目标清单（markdown 文档 + 日志） |
 | `fallbackrouter.cleanup` | Fallback Router: Clean up stored data | 清除迁移时捕获的旧密钥（`fallbackrouter.<ref>`，引用名单存于 globalState `legacySecretRefs`）与熔断状态（`fallbackrouter.breaker.*`）。幂等：二次运行无键可删、无异常。 |
 
-> `fallbackrouter.setApiKey` 已删除（v0.2.0）：密钥改在 GCMP 侧配置，本扩展不再管理任何 API key。
+> `fallbackrouter.setApiKey` 已删除（v0.1.0）：密钥改在 GCMP 侧配置，本扩展不再管理任何 API key。
 
 ## 7. `managementCommand` 弃用说明
 

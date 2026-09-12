@@ -96,7 +96,7 @@ A VS Code extension that chains **concrete per-vendor models** (provided by the 
 | `fallbackrouter.showDiagnostics` | Fallback Router: Show diagnostics | 自检 + 链/目标清单（markdown 文档 + 日志） |
 | `fallbackrouter.cleanup` | Fallback Router: Clean up stored data | 清除迁移前遗留的旧密钥（`fallbackrouter.<ref>`，引用名单存于 globalState `legacySecretRefs`）与熔断状态（`fallbackrouter.breaker.*`）。幂等、容错 |
 
-> 密钥全部改在 GCMP 侧配置，本扩展不再管理任何 API key（v0.2.0 起，密钥管理命令已随 HTTP 栈一并移除）。
+> 密钥全部改在 GCMP 侧配置，本扩展不再管理任何 API key（v0.1.0 起，密钥管理命令已随 HTTP 栈一并移除）。
 
 ## 配置参考（摘要）
 
@@ -114,11 +114,11 @@ A VS Code extension that chains **concrete per-vendor models** (provided by the 
 | `fallbackRouter.noticeStyle` | `markdown` | 中流切换通知样式 |
 | `fallbackRouter.logLevel` | `info` | 输出面板日志级别 |
 
-> `fallbackRouter.timeouts`（HTTP 传输预算）已随 HTTP 栈删除（v0.2.0）。
+> `fallbackRouter.timeouts`（HTTP 传输预算）已随 HTTP 栈删除（v0.1.0）。
 
-## 迁移说明（v0.1.x → v0.2.x）
+## 迁移说明（v0.1.x）
 
-v0.2.0 起本扩展**不再支持 `http` 目标**（HTTP 传输与密钥管理命令已删除）：
+v0.1.0 起本扩展**不再支持 `http` 目标**（HTTP 传输与密钥管理命令已删除）：
 
 - 旧配置中的 `http` 目标在加载时**自动剥离**：每个被剥离的目标计数到 `droppedHttpTargets`，其密钥引用名被捕获到 globalState `legacySecretRefs`（供 `fallbackrouter.cleanup` 一次性清除旧密钥），链中其余 proxy 目标保留；配置加载日志给出警告。
 - 请把密钥迁到 GCMP（GCMP 密钥配置），然后用 **Manage → Import GCMP config** 重新导入生成代理链。
