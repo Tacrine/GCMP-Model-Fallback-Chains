@@ -11,7 +11,7 @@ name: Release VSIX
 # If the `VSCE_PAT` secret is configured, the workflow also publishes to the
 # official VS Code Marketplace (publisher: tacrine).
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       tag:
@@ -93,7 +93,7 @@ jobs:
           fail_on_unmatched_files: true
 
       - name: Publish to VS Code Marketplace
-        if: secrets.VSCE_PAT != ''
+        if: ${{ secrets.VSCE_PAT != '' }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx vsce publish --no-dependencies -p "$VSCE_PAT" --packagePath "${{ steps.version.outputs.file }}"
