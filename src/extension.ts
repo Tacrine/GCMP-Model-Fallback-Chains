@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { normalizeConfig, extractLegacySecretRefs, ConfigSink } from './config';
+import { normalizeConfig, extractLegacySecretRefs, shouldShowMigrationNotice, ConfigSink } from './config';
 import type { RouterConfig, Chain, Target, ProxyTarget } from './types';
 import { FallbackRouterProvider } from './provider';
 import { OutputLogger, StatusBar } from './observability';
@@ -100,7 +100,7 @@ function captureLegacyHttpRefs(raw: vscode.WorkspaceConfiguration): void {
 
 /** One-time migration banner — shown until migrated.strippedAt is recorded. */
 async function showMigrationNotice(dropped: number): Promise<void> {
-  if (activeContext.globalState.get<number>('migrated.strippedAt') !== undefined) return;
+  if (!shouldShowMigrationNotice(activeContext.globalState.get<number>('migrated.strippedAt'))) return;
   const choice = await vscode.window.showInformationMessage(
     `Fallback Router removed ${dropped} legacy http target(s): this GCMP companion routes through proxy targets and GCMP manages provider keys. Re-import chains from GCMP to continue.`,
     '重新导入'

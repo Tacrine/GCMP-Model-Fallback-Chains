@@ -2,6 +2,13 @@ import type { Chain, RouterConfig, Target, ProxyTarget } from './types';
 
 export const CHAIN_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
+/** One-time migration banner gate: the notice fires only until
+   * 'migrated.strippedAt' is recorded; on later loads (strippedAt set) the
+   * popup is suppressed and the strip is log-only (F1 silent-point #4). */
+export function shouldShowMigrationNotice(strippedAt: number | undefined): boolean {
+  return strippedAt === undefined;
+}
+
 export interface ConfigLoadResult {
   config: RouterConfig;
   warnings: string[];

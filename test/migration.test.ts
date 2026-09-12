@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { normalizeConfig, extractLegacySecretRefs } from '../src/config';
+import { normalizeConfig, extractLegacySecretRefs, shouldShowMigrationNotice } from '../src/config';
 
 function sink() {
   const warn = vi.fn();
@@ -105,3 +105,14 @@ describe('extractLegacySecretRefs (RAW capture, overwrite semantics in caller)',
     expect(extractLegacySecretRefs({})).toEqual([]);
   });
 });
+
+  describe('shouldShowMigrationNotice (one-time banner gate, F1 silent-point #4)', () => {
+    it('shows the banner when no strip has been recorded yet', () => {
+      expect(shouldShowMigrationNotice(undefined)).toBe(true);
+    });
+
+    it('suppresses the popup on later loads once migrated.strippedAt exists', () => {
+      expect(shouldShowMigrationNotice(123)).toBe(false);
+      expect(shouldShowMigrationNotice(0)).toBe(false);
+    });
+  });
