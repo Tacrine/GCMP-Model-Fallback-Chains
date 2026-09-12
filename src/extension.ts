@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { normalizeConfig, extractLegacySecretRefs, shouldShowMigrationNotice, ConfigSink } from './config';
-import type { RouterConfig, Chain, Target, ProxyTarget } from './types';
+import type { RouterConfig, Chain, ProxyTarget } from './types';
 import { FallbackRouterProvider } from './provider';
 import { OutputLogger, StatusBar } from './observability';
 import { importFromLm, type LmModelLike } from './import/importer';
+import { runManageMenu, targetLabel, type LmModel, type ManageDeps } from './manage/menu';
+import { VscodeMenuUi, l10nT } from './manage/vscode-ui';
 
 const VENDOR = 'fallbackrouter';
 
@@ -120,113 +122,51 @@ function registerCommands(context: vscode.ExtensionContext): void {
   );
 }
 
+/**
+ * `Fallback Router: Manage` command. The navigation/dispatch logic lives in
+ * `manage/menu.ts`; this wires it to the real VS Code surfaces. The menu keeps
+ * itself open after every action (returning to the action level), so several
+ * edits can be chained from a single invocation.
+ */
 async function manage(): Promise<void> {
-  const chains = config.chains;
-  if (chains.length === 0) {
-    const choice = await vscode.window.showInformationMessage(
-      vscode.l10n.t('No chains configured. Import from GCMP or open settings?'),
-      vscode.l10n.t('Import from GCMP'),
-      vscode.l10n.t('Open settings.json')
-    );
-    if (choice === vscode.l10n.t('Import from GCMP')) return importGcmpFlow();
-    if (choice === vscode.l10n.t('Open settings.json')) return openSettings();
-    return;
-  }
-  const picks = chains.map((c) => ({
-    label: `${c.name} (${c.targets.length} targets${c.targets.length === 1 ? ', no fallback' : ''})`,
-    chain: c,
-  }));
-  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Fallback Router: select chain') });
-  if (!picked) return;
-  const actions = [
-    vscode.l10n.t('Add target'),
-    vscode.l10n.t('Remove target'),
-    vscode.l10n.t('Move up'),
-    vscode.l10n.t('Move down'),
-    vscode.l10n.t('Test this target'),
-    vscode.l10n.t('Import GCMP config'),
-    vscode.l10n.t('Open settings.json'),
-  ];
-  const action = await vscode.window.showQuickPick(actions, { title: `Chain: ${picked.chain.name}` });
-  if (!action) return;
-  switch (action) {
-    case vscode.l10n.t('Add target'): return addTarget(picked.chain);
-    case vscode.l10n.t('Remove target'): return removeTarget(picked.chain);
-    case vscode.l10n.t('Move up'): return moveTarget(picked.chain, -1);
-    case vscode.l10n.t('Move down'): return moveTarget(picked.chain, 1);
-    case vscode.l10n.t('Test this target'): return testTarget(picked.chain);
-    case vscode.l10n.t('Import GCMP config'): return importGcmpFlow();
-    case vscode.l10n.t('Open settings.json'): return openSettings();
+  const ui = new VscodeMenuUi({ log: (msg) => logger.warn(`[manage] ${msg}`) });
+  const deps: ManageDeps = {
+    ui,
+    getChains: () => readChains(),
+    writeChains: async (chains) => writeChains(chains),
+    gcmpModels: () => listGcmpModels(),
+    importGcmpConfig: () => importGcmpFlow(),
+    openSettings: async () => openSettings(),
+    testTarget: (target) => probeTarget(target),
+    t: l10nT,
+  };
+  try {
+    await runManageMenu(deps);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error(`[manage] ${msg}`);
+    void vscode.window.showErrorMessage(msg);
   }
 }
 
-async function addTarget(chain: Chain): Promise<void> {
-  const updated = { ...chain, targets: [...chain.targets] };
-  // Offer a picker over the live GCMP models first, with manual input kept as
-  // a fallback entry so both flows coexist. Selecting a model pre-fills its
-  // actual vendor id (e.g. gcmp.deepseek) and model id — no typing required.
+/** Fresh read of the persisted chains. The module-level `config` cache is
+ * refreshed by onDidChangeConfiguration, which can lag a write by one round
+ * trip — the menu must never operate on stale data. */
+function readChains(): Chain[] {
+  const raw = vscode.workspace.getConfiguration('fallbackRouter');
+  return normalizeConfig(raw, { warn: () => { /* menu steps stay quiet */ }, error: () => { /* ditto */ } }).config.chains;
+}
+
+/** Live GCMP models: vendors actually declared by the vicanent.gcmp package. */
+async function listGcmpModels(): Promise<LmModel[]> {
   const declared = declaredGcmpVendors();
   const all = await vscode.lm.selectChatModels({});
-  const live = all.filter((m) => m.vendor.startsWith('gcmp.') && declared.has(m.vendor));
-  const inChain = new Set(chain.targets.map((t) => `${t.vendor}/${t.modelId}`));
-  const MANUAL = vscode.l10n.t('Manual input (enter vendor & modelId)');
-  const picks: vscode.QuickPickItem[] = [
-    ...live.map((m) => ({
-      label: m.name && m.name !== m.id ? `${m.name}` : m.id,
-      description: m.vendor,
-      detail: inChain.has(`${m.vendor}/${m.id}`) ? `${m.vendor}/${m.id} — ${vscode.l10n.t('already in chain')}` : `${m.vendor}/${m.id}`,
-      model: m,
-    })),
-    { label: MANUAL, description: vscode.l10n.t('type vendor & modelId yourself') },
-  ];
-  const picked = await vscode.window.showQuickPick(picks, {
-    title: vscode.l10n.t('Add target to chain: {name}', { name: chain.name }),
-    placeHolder: vscode.l10n.t('Select a GCMP model, or use manual input'),
-    matchOnDescription: true,
-  });
-  if (!picked) return;
-  let vendor: string | undefined;
-  let modelId: string | undefined;
-  const model = (picked as { model?: LmModelLike }).model;
-  if (model) {
-    vendor = model.vendor;
-    modelId = model.id;
-  } else {
-    vendor = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy vendor (e.g. gcmp.compatible)') });
-    if (!vendor) return;
-    modelId = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy modelId') });
-    if (!modelId) return;
-  }
-  updated.targets.push({ kind: 'proxy', vendor, modelId });
-  await writeChains(config.chains.map((c) => (c.id === chain.id ? updated : c)));
+  return all
+    .filter((m) => m.vendor.startsWith('gcmp.') && declared.has(m.vendor))
+    .map((m) => ({ vendor: m.vendor, id: m.id, name: m.name }));
 }
 
-async function removeTarget(chain: Chain): Promise<void> {
-  const picks = chain.targets.map((t, i) => ({ label: targetLabel(t), index: i }));
-  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select target to remove') });
-  if (picked === undefined) return;
-  const updated = { ...chain, targets: chain.targets.filter((_, i) => i !== picked.index) };
-  await writeChains(config.chains.map((c) => (c.id === chain.id ? updated : c)));
-}
-
-async function moveTarget(chain: Chain, dir: number): Promise<void> {
-  const picks = chain.targets.map((t, i) => ({ label: targetLabel(t), index: i }));
-  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select target to move') });
-  if (picked === undefined) return;
-  const i = picked.index;
-  const j = i + dir;
-  if (j < 0 || j >= chain.targets.length) return;
-  const arr = [...chain.targets];
-  [arr[i], arr[j]] = [arr[j], arr[i]];
-  await writeChains(config.chains.map((c) => (c.id === chain.id ? { ...chain, targets: arr } : c)));
-}
-
-async function testTarget(chain: Chain): Promise<void> {
-  const picks = chain.targets.map((t, i) => ({ label: targetLabel(t), index: i }));
-  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select target to test') });
-  if (picked === undefined) return;
-  const target = chain.targets[picked.index];
-  if (target.kind !== 'proxy') return;
+async function probeTarget(target: ProxyTarget): Promise<void> {
   const label = targetLabel(target);
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Testing target...') }, async () => {
     try {
@@ -285,9 +225,7 @@ async function openGcmpSetup(): Promise<void> {
 }
 
 export async function importGcmpFlow(): Promise<void> {
-  const declared = declaredGcmpVendors();
-  const all = await vscode.lm.selectChatModels({});
-  const live: LmModelLike[] = all.filter((m) => m.vendor.startsWith('gcmp.') && declared.has(m.vendor));
+  const live: LmModelLike[] = await listGcmpModels();
   if (live.length === 0) {
     const choice = await vscode.window.showWarningMessage(
       '未找到可用的 GCMP 供应商模型，请先配置 GCMP 供应商后重试。',
@@ -471,10 +409,6 @@ export async function cleanup(context: vscode.ExtensionContext): Promise<void> {
 
 function openSettings(): Thenable<void> {
   return vscode.commands.executeCommand('workbench.action.openSettings', 'fallbackRouter');
-}
-
-function targetLabel(t: Target): string {
-  return `proxy ${t.vendor}/${t.modelId}`;
 }
 
 async function writeChains(chains: Chain[]): Promise<void> {

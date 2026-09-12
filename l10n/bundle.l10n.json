@@ -40,5 +40,13 @@
 	"去安装 GCMP": "去安装 GCMP",
 	"未找到可用的 GCMP 供应商模型，请先配置 GCMP 供应商后重试。": "未找到可用的 GCMP 供应商模型，请先配置 GCMP 供应商后重试。",
 	"打开配置": "打开配置",
-	"未生成可用的代理链。": "未生成可用的代理链。"
+	"未生成可用的代理链。": "未生成可用的代理链。",
+	"Back to chain list": "Back to chain list",
+	"Chain: {name}": "Chain: {name}",
+	"{name} (no targets)": "{name} (no targets)",
+	"{name} ({count} target, no fallback)": "{name} ({count} target, no fallback)",
+	"{name} ({count} targets)": "{name} ({count} targets)",
+	"Action failed: {message}": "Action failed: {message}",
+	"Already the first target.": "Already the first target.",
+	"Already the last target.": "Already the last target."
 }

@@ -89,7 +89,7 @@ A VS Code extension that chains **concrete per-vendor models** (provided by the 
 
 | 命令 id | 标题 | 说明 |
 |---|---|---|
-| `fallbackrouter.manage` | Fallback Router: Manage | 链管理 UI：增删/排序/测试目标、**Import GCMP config**（实时导入）、打开设置 |
+| `fallbackrouter.manage` | Fallback Router: Manage | 链管理 UI：增删/排序/测试目标、**Import GCMP config**（实时导入）、打开设置。动作执行完会**回到动作菜单**继续操作（`Back to chain list` 或 `Esc` 返回链列表）。 |
 | `fallbackrouter.apply` | Fallback Router: Apply imported chains | 剪贴板 JSON → `fallbackRouter.chains`（写前验证 + 写后回环，失败回滚） |
 | `fallbackrouter.warmup` | Fallback Router: Warm up proxy targets | 解析并报告所有 `proxy` 目标的模型可见性 |
 | `fallbackrouter.set-default-model` | Fallback Router: Set default model | 写入 `chat.planAgent.defaultModel` / `chat.exploreAgent.defaultModel` / `chat.utilityModel`（先校验可解析） |

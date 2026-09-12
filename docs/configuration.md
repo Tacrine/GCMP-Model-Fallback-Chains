@@ -133,7 +133,7 @@ interface Chain {
 
 | 命令 id | 标题 | 说明 |
 |---|---|---|
-| `fallbackrouter.manage` | Fallback Router: Manage | 链管理 UI（增删/排序/测试目标、Import GCMP config、打开设置）。"Add target" 收集 `vendor` + `modelId`（proxy-only）。 |
+| `fallbackrouter.manage` | Fallback Router: Manage | 链管理 UI（增删/排序/测试目标、Import GCMP config、打开设置）。"Add target" 收集 `vendor` + `modelId`（proxy-only）。动作执行完回到动作菜单继续操作（`Back to chain list` / `Esc` 返回链列表）。 |
 | `fallbackrouter.apply` | Fallback Router: Apply imported chains | 剪贴板 JSON → `fallbackRouter.chains`（写前验证 + 写后回环，失败回滚） |
 | `fallbackrouter.warmup` | Fallback Router: Warm up proxy targets | 解析并报告所有 `proxy` 目标的模型可见性 |
 | `fallbackrouter.set-default-model` | Fallback Router: Set default model | 写入 `chat.planAgent.defaultModel` / `chat.exploreAgent.defaultModel` / `chat.utilityModel`（先校验可解析） |
