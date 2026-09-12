@@ -1,0 +1,99 @@
+name: Release VSIX
+
+# Creates a GitHub Release with the packaged .vsix attached, so users can
+# download the extension directly from the Releases page.
+#
+# Triggers:
+#   - Pushing a tag matching "v*" (e.g. `git tag v0.1.0 && git push origin v0.1.0`)
+#   - Manual run from the Actions tab (tag can be supplied as input, defaults
+#     to the latest git tag, or to a date-stamped build if none exists)
+#
+# If the `VSCE_PAT` secret is configured, the workflow also publishes to the
+# official VS Code Marketplace (publisher: tacrine).
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0). Leave empty to use latest tag or a date-stamped build.'
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$LATEST_TAG" ]; then
+              TAG="$LATEST_TAG"
+            else
+              TAG="build-$(date +%Y%m%d%H%M%S)"
+            fi
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "file=copilot-model-fallback-${VERSION}.vsix" >> "$GITHUB_OUTPUT"
+          echo "Tag: $TAG  Version: $VERSION"
+
+      - name: Package VSIX
+        run: npx vsce package --no-dependencies -o "${{ steps.version.outputs.file }}"
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body: |
+            ## Download
+
+            - [⬇️ ${{ steps.version.outputs.file }}](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.version.outputs.file }})
+
+            Install: `code --install-extension ${{ steps.version.outputs.file }}` or install from the Extensions view via "Install from VSIX...".
+          files: ${{ steps.version.outputs.file }}
+          fail_on_unmatched_files: true
+
+      - name: Publish to VS Code Marketplace
+        if: secrets.VSCE_PAT != ''
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --no-dependencies -p "$VSCE_PAT" --packagePath "${{ steps.version.outputs.file }}"
