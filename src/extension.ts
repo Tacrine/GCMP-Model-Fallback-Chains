@@ -6,7 +6,6 @@ import { OutputLogger, StatusBar } from './observability';
 import { importFromLm, type LmModelLike } from './import/importer';
 
 const VENDOR = 'fallbackrouter';
-const SECRET_PREFIX = 'fallbackrouter.';
 
 class Sink implements ConfigSink {
   constructor(private readonly logger: OutputLogger) {}
@@ -18,7 +17,6 @@ let logger: OutputLogger;
 let statusBar: StatusBar;
 let provider: FallbackRouterProvider;
 let config: RouterConfig;
-let secretRefs: string[] = [];
 let activeContext: vscode.ExtensionContext;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -403,26 +401,29 @@ async function showDiagnostics(): Promise<void> {
   await vscode.window.showTextDocument(doc);
 }
 
-async function cleanup(context: vscode.ExtensionContext): Promise<void> {
+export async function cleanup(context: vscode.ExtensionContext): Promise<void> {
   const confirm = await vscode.window.showWarningMessage(
     'Delete all stored API keys and breaker state for Fallback Router?',
     { modal: true },
     'Delete'
   );
   if (confirm !== 'Delete') return;
-  // SecretStorage has no enumeration API; delete tracked refs (legacy http
-  // target refs captured during config loads) + already-known secret values.
-  const refs = new Set<string>(secretRefs);
-  const legacy = activeContext.globalState.get<string[]>('legacySecretRefs', []);
-  for (const ref of legacy) refs.add(ref);
-  for (const ref of refs) {
-    const key = SECRET_PREFIX + ref;
+  // (a) Deletion iterates ONLY over ref NAMES captured at migration time
+  // (T3, globalState 'legacySecretRefs'). Known secret VALUES (knownSecrets)
+  // are merged into the redaction list but are values, not keys — they must
+  // never drive the delete loop (momus #5).
+  const legacy = context.globalState.get<string[]>('legacySecretRefs', []);
+  for (const ref of legacy) {
+    const key = `fallbackrouter.${ref}`;
     try {
       const v = await context.secrets.get(key);
       if (v) knownSecrets.push(v);
     } catch { /* ignore */ }
     await Promise.resolve(context.secrets.delete(key)).catch(() => { /* ignore */ });
   }
+  // (b) Clear the captured refs -> a second run finds nothing (idempotent).
+  await context.globalState.update('legacySecretRefs', undefined);
+  // (c) Breaker state persists under globalState keys 'fallbackrouter.breaker.*'.
   for (const k of context.globalState.keys()) {
     if (k.startsWith('fallbackrouter.')) await context.globalState.update(k, undefined);
   }
