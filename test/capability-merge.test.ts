@@ -60,7 +60,7 @@ describe('mergeChainCapabilities (pure, T3 Metis #1)', () => {
       { capabilities: { toolCalling: true, imageInput: true } },
       { capabilities: { toolCalling: false, imageInput: true } },
     ]);
-    expect(caps.toolCalling).toBe(false);
+      expect(caps.toolCalling).toBe(false);
   });
 
   it('ANDs imageInput across resolvable metadata', () => {

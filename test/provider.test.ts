@@ -11,7 +11,6 @@ function makeConfig(chains: RouterConfig['chains']): RouterConfig {
     chains,
     retry: { maxAttempts: 3, initialDelayMs: 1000, backoffFactor: 2, maxDelayMs: 15000 },
     circuitBreaker: { failureThreshold: 3, cooldownMs: 60000 },
-    timeouts: { connectMs: 10000, headersMs: 15000, firstByteMs: 60000, stallMs: 120000 },
     maxTurnMs: 600000,
     maxTargetsPerTurn: 5,
     importMode: 'family',
@@ -39,54 +38,83 @@ function makeProvider(cfg: RouterConfig) {
   });
 }
 
-describe('FallbackRouterProvider.refresh', () => {
-  beforeEach(() => { vi.clearAllMocks(); vscodeMock.__resetSinks(); });
+type FakeModel = { vendor: string; id: string; maxInputTokens?: number };
 
-  it('builds one model per chain and emits change event', async () => {
+function stubSelect(bySelector: (vendor: string, id: string) => FakeModel[]): void {
+  (vscodeMock.lm as { selectChatModels: (s: { vendor?: string; id?: string }) => Promise<FakeModel[]> }).selectChatModels =
+    (s) => Promise.resolve(bySelector(s.vendor ?? '', s.id ?? ''));
+}
+
+beforeEach(() => {
+  (vscodeMock.lm as { selectChatModels: () => Promise<never[]> }).selectChatModels = async () => [];
+  vi.clearAllMocks();
+  vscodeMock.__resetSinks();
+});
+
+describe('FallbackRouterProvider.refresh (live metadata merge, T3)', () => {
+  it('builds one model per chain and emits change event; token caps = chain min', async () => {
     const cfg = makeConfig([
       { id: 'deepseek', name: 'deepseek', targets: [
-        { kind: 'http', baseUrl: 'a', apiType: 'chat-completions', model: 'm', secretRef: 'r', maxInputTokens: 64000, maxOutputTokens: 2048, toolCalling: true },
-        { kind: 'http', baseUrl: 'b', apiType: 'responses', model: 'm', secretRef: 'r', maxInputTokens: 128000, maxOutputTokens: 4096, toolCalling: true },
+        { kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'deepseek/deepseek-chat' },
+        { kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'deepseek/deepseek-reasoner' },
       ]},
-      { id: 'gpt', name: 'gpt', targets: [{ kind: 'http', baseUrl: 'c', apiType: 'chat-completions', model: 'm', secretRef: 'r' }] },
+      { id: 'gpt', name: 'gpt', targets: [{ kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'openai/gpt-4o' }] },
     ]);
+    stubSelect((vendor, id) => {
+      if (vendor !== 'gcmp.compatible') return [];
+      const caps: Record<string, number> = {
+        'deepseek/deepseek-chat': 64000,
+        'deepseek/deepseek-reasoner': 128000,
+        'openai/gpt-4o': 128000,
+      };
+      return [{ vendor, id, maxInputTokens: caps[id] ?? 0 }];
+    });
     const p = makeProvider(cfg);
     const listener = vi.fn();
     p.onDidChangeLanguageModelChatInformation(listener);
-    p.refresh();
+    await p.refresh();
     const models = await p.provideLanguageModelChatInformation({}, { isCancellationRequested: false, onCancellationRequested: () => () => {} } as never);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(models).toHaveLength(2);
     const ds = models.find((m) => m.id === 'fallbackrouter:deepseek')!;
     expect(ds.name).toBe('deepseek (fallback)');
-    expect(ds.maxInputTokens).toBe(64000); // min across targets
-    expect(ds.maxOutputTokens).toBe(2048);
+    expect(ds.maxInputTokens).toBe(64000); // min across targets from live metadata
+    // 1.137 selectChatModels exposes no maxOutputTokens -> conservative default.
+    expect(ds.maxOutputTokens).toBe(4096);
+    // Platform metadata has no capabilities on 1.137 -> toolCalling never
+    // downgraded optimistically, imageInput not claimed without proof.
     expect(ds.capabilities.toolCalling).toBe(true);
+    expect(ds.capabilities.imageInput).toBe(false);
   });
 
-  it('reflects toolCalling false when no target supports it and imageInput only when all support', async () => {
+  it('falls back to conservative defaults when a target is unresolvable', async () => {
     const cfg = makeConfig([{ id: 'noop', name: 'noop', targets: [
-      { kind: 'http', baseUrl: 'a', apiType: 'chat-completions', model: 'm', secretRef: 'r', toolCalling: false, imageInput: true },
+      { kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'no/such-model' },
     ]}]);
+    stubSelect(() => []);
     const p = makeProvider(cfg);
-    p.refresh();
+    await p.refresh();
     const models = await p.provideLanguageModelChatInformation({}, {} as never);
-    expect(models[0].capabilities.toolCalling).toBe(false);
-    expect(models[0].capabilities.imageInput).toBe(true);
+    expect(models).toHaveLength(1);
+    expect(models[0].maxInputTokens).toBe(128000); // conservative default cap
+    expect(models[0].capabilities.toolCalling).toBe(true);
+    expect(models[0].capabilities.imageInput).toBe(false);
   });
 
   it('provides token count estimate', async () => {
-    const cfg = makeConfig([{ id: 'a', name: 'a', targets: [{ kind: 'http', baseUrl: 'a', apiType: 'chat-completions', model: 'm', secretRef: 'r' }] }]);
+    const cfg = makeConfig([{ id: 'a', name: 'a', targets: [{ kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'openai/gpt-4o' }] }]);
+    stubSelect((vendor, id) => [{ vendor, id, maxInputTokens: 128000 }]);
     const p = makeProvider(cfg);
-    p.refresh();
+    await p.refresh();
     const n = await p.provideTokenCount({} as never, 'hello world', {} as never);
     expect(n).toBeGreaterThan(0);
   });
 
   it('silent information request returns models without UI', async () => {
-    const cfg = makeConfig([{ id: 'a', name: 'a', targets: [{ kind: 'http', baseUrl: 'a', apiType: 'chat-completions', model: 'm', secretRef: 'r' }] }]);
+    const cfg = makeConfig([{ id: 'a', name: 'a', targets: [{ kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'openai/gpt-4o' }] }]);
+    stubSelect((vendor, id) => [{ vendor, id, maxInputTokens: 128000 }]);
     const p = makeProvider(cfg);
-    p.refresh();
+    await p.refresh();
     const models = await p.provideLanguageModelChatInformation({ silent: true }, {} as never);
     expect(models).toHaveLength(1);
     expect(vscodeMock.__channelLines()).toHaveLength(0);
