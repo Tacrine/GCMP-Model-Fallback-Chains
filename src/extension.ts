@@ -162,10 +162,41 @@ async function manage(): Promise<void> {
 
 async function addTarget(chain: Chain): Promise<void> {
   const updated = { ...chain, targets: [...chain.targets] };
-  const vendor = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy vendor (e.g. gcmp.compatible)') });
-  if (!vendor) return;
-  const modelId = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy modelId') });
-  if (!modelId) return;
+  // Offer a picker over the live GCMP models first, with manual input kept as
+  // a fallback entry so both flows coexist. Selecting a model pre-fills its
+  // actual vendor id (e.g. gcmp.deepseek) and model id — no typing required.
+  const declared = declaredGcmpVendors();
+  const all = await vscode.lm.selectChatModels({});
+  const live = all.filter((m) => m.vendor.startsWith('gcmp.') && declared.has(m.vendor));
+  const inChain = new Set(chain.targets.map((t) => `${t.vendor}/${t.modelId}`));
+  const MANUAL = vscode.l10n.t('Manual input (enter vendor & modelId)');
+  const picks: vscode.QuickPickItem[] = [
+    ...live.map((m) => ({
+      label: m.name && m.name !== m.id ? `${m.name}` : m.id,
+      description: m.vendor,
+      detail: inChain.has(`${m.vendor}/${m.id}`) ? `${m.vendor}/${m.id} — ${vscode.l10n.t('already in chain')}` : `${m.vendor}/${m.id}`,
+      model: m,
+    })),
+    { label: MANUAL, description: vscode.l10n.t('type vendor & modelId yourself') },
+  ];
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: vscode.l10n.t('Add target to chain: {name}', { name: chain.name }),
+    placeHolder: vscode.l10n.t('Select a GCMP model, or use manual input'),
+    matchOnDescription: true,
+  });
+  if (!picked) return;
+  let vendor: string | undefined;
+  let modelId: string | undefined;
+  const model = (picked as { model?: LmModelLike }).model;
+  if (model) {
+    vendor = model.vendor;
+    modelId = model.id;
+  } else {
+    vendor = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy vendor (e.g. gcmp.compatible)') });
+    if (!vendor) return;
+    modelId = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy modelId') });
+    if (!modelId) return;
+  }
   updated.targets.push({ kind: 'proxy', vendor, modelId });
   await writeChains(config.chains.map((c) => (c.id === chain.id ? updated : c)));
 }
