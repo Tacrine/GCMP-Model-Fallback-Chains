@@ -89,6 +89,13 @@ export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3
 
 export const LanguageModelChatMessageRole = { User: 1, Assistant: 2, System: 3 };
 
+export const l10n = {
+  t: (message: string, args?: Record<string, unknown>): string => {
+    if (!args) return message;
+    return message.replace(/\{(\w+)\}/g, (_m, k) => String(args[k] ?? ''));
+  },
+};
+
 export const Uri = { parse: (s: string): unknown => s };
 
 export function __resetSinks(): void { channelSink = []; statusSink = { text: '', tooltip: '' }; }

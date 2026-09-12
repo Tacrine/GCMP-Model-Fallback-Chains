@@ -26,8 +26,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const gcmp = vscode.extensions.getExtension('vicanent.gcmp');
   if (!gcmp) {
     const install = await vscode.window.showErrorMessage(
-      'Fallback Router chains need the GCMP extension (vicanent.gcmp) to provide model vendors. Install GCMP and reload the window.',
-      '去安装 GCMP'
+      vscode.l10n.t('Fallback Router chains need the GCMP extension (vicanent.gcmp) to provide model vendors. Install GCMP and reload the window.'),
+      vscode.l10n.t('去安装 GCMP')
     );
     if (install) {
       await vscode.commands.executeCommand('workbench.extensions.search', 'vicanent.gcmp');
@@ -124,39 +124,47 @@ async function manage(): Promise<void> {
   const chains = config.chains;
   if (chains.length === 0) {
     const choice = await vscode.window.showInformationMessage(
-      'No chains configured. Import from GCMP or open settings?',
-      'Import from GCMP',
-      'Open settings.json'
+      vscode.l10n.t('No chains configured. Import from GCMP or open settings?'),
+      vscode.l10n.t('Import from GCMP'),
+      vscode.l10n.t('Open settings.json')
     );
-    if (choice === 'Import from GCMP') return importGcmpFlow();
-    if (choice === 'Open settings.json') return openSettings();
+    if (choice === vscode.l10n.t('Import from GCMP')) return importGcmpFlow();
+    if (choice === vscode.l10n.t('Open settings.json')) return openSettings();
     return;
   }
   const picks = chains.map((c) => ({
     label: `${c.name} (${c.targets.length} targets${c.targets.length === 1 ? ', no fallback' : ''})`,
     chain: c,
   }));
-  const picked = await vscode.window.showQuickPick(picks, { title: 'Fallback Router: select chain' });
+  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Fallback Router: select chain') });
   if (!picked) return;
-  const actions = ['Add target', 'Remove target', 'Move up', 'Move down', 'Test this target', 'Import GCMP config', 'Open settings.json'];
+  const actions = [
+    vscode.l10n.t('Add target'),
+    vscode.l10n.t('Remove target'),
+    vscode.l10n.t('Move up'),
+    vscode.l10n.t('Move down'),
+    vscode.l10n.t('Test this target'),
+    vscode.l10n.t('Import GCMP config'),
+    vscode.l10n.t('Open settings.json'),
+  ];
   const action = await vscode.window.showQuickPick(actions, { title: `Chain: ${picked.chain.name}` });
   if (!action) return;
   switch (action) {
-    case 'Add target': return addTarget(picked.chain);
-    case 'Remove target': return removeTarget(picked.chain);
-    case 'Move up': return moveTarget(picked.chain, -1);
-    case 'Move down': return moveTarget(picked.chain, 1);
-    case 'Test this target': return testTarget(picked.chain);
-    case 'Import GCMP config': return importGcmpFlow();
-    case 'Open settings.json': return openSettings();
+    case vscode.l10n.t('Add target'): return addTarget(picked.chain);
+    case vscode.l10n.t('Remove target'): return removeTarget(picked.chain);
+    case vscode.l10n.t('Move up'): return moveTarget(picked.chain, -1);
+    case vscode.l10n.t('Move down'): return moveTarget(picked.chain, 1);
+    case vscode.l10n.t('Test this target'): return testTarget(picked.chain);
+    case vscode.l10n.t('Import GCMP config'): return importGcmpFlow();
+    case vscode.l10n.t('Open settings.json'): return openSettings();
   }
 }
 
 async function addTarget(chain: Chain): Promise<void> {
   const updated = { ...chain, targets: [...chain.targets] };
-  const vendor = await vscode.window.showInputBox({ prompt: 'proxy vendor (e.g. gcmp.compatible)' });
+  const vendor = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy vendor (e.g. gcmp.compatible)') });
   if (!vendor) return;
-  const modelId = await vscode.window.showInputBox({ prompt: 'proxy modelId' });
+  const modelId = await vscode.window.showInputBox({ prompt: vscode.l10n.t('proxy modelId') });
   if (!modelId) return;
   updated.targets.push({ kind: 'proxy', vendor, modelId });
   await writeChains(config.chains.map((c) => (c.id === chain.id ? updated : c)));
@@ -164,7 +172,7 @@ async function addTarget(chain: Chain): Promise<void> {
 
 async function removeTarget(chain: Chain): Promise<void> {
   const picks = chain.targets.map((t, i) => ({ label: targetLabel(t), index: i }));
-  const picked = await vscode.window.showQuickPick(picks, { title: 'Select target to remove' });
+  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select target to remove') });
   if (picked === undefined) return;
   const updated = { ...chain, targets: chain.targets.filter((_, i) => i !== picked.index) };
   await writeChains(config.chains.map((c) => (c.id === chain.id ? updated : c)));
@@ -172,7 +180,7 @@ async function removeTarget(chain: Chain): Promise<void> {
 
 async function moveTarget(chain: Chain, dir: number): Promise<void> {
   const picks = chain.targets.map((t, i) => ({ label: targetLabel(t), index: i }));
-  const picked = await vscode.window.showQuickPick(picks, { title: 'Select target to move' });
+  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select target to move') });
   if (picked === undefined) return;
   const i = picked.index;
   const j = i + dir;
@@ -184,16 +192,16 @@ async function moveTarget(chain: Chain, dir: number): Promise<void> {
 
 async function testTarget(chain: Chain): Promise<void> {
   const picks = chain.targets.map((t, i) => ({ label: targetLabel(t), index: i }));
-  const picked = await vscode.window.showQuickPick(picks, { title: 'Select target to test' });
+  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select target to test') });
   if (picked === undefined) return;
   const target = chain.targets[picked.index];
   if (target.kind !== 'proxy') return;
   const label = targetLabel(target);
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing target...' }, async () => {
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Testing target...') }, async () => {
     try {
       const models = await vscode.lm.selectChatModels({ vendor: target.vendor, id: target.modelId });
       const m = models.find((x) => x.vendor === target.vendor && x.id === target.modelId);
-      if (!m) throw new Error('model not resolvable');
+      if (!m) throw new Error(vscode.l10n.t('model not resolvable'));
       // Disposable-shaped token (platform requires a dispose() on cleanup).
       const token: vscode.CancellationToken = {
         isCancellationRequested: false,
@@ -282,28 +290,28 @@ async function applyChains(): Promise<void> {
     if (!Array.isArray(parsed)) throw new Error('expected array');
     chains = parsed as Chain[];
   } catch {
-    void vscode.window.showErrorMessage('Clipboard does not contain a valid chains array.');
+    void vscode.window.showErrorMessage(vscode.l10n.t('Clipboard does not contain a valid chains array.'));
     return;
   }
   // Write-before structural validation.
   const testSink = new Sink(logger);
   const normalized = normalizeConfig({ ...config, chains }, testSink);
   if (normalized.droppedChains > 0 || normalized.config.chains.length !== chains.length) {
-    void vscode.window.showErrorMessage('Chains failed structural validation; see log.');
+    void vscode.window.showErrorMessage(vscode.l10n.t('Chains failed structural validation; see log.'));
     return;
   }
   const confirm = await vscode.window.showInformationMessage(
-    `Apply ${chains.length} chain(s) to fallbackRouter.chains?`,
+    vscode.l10n.t('Apply {count} chain(s) to fallbackRouter.chains?', { count: chains.length }),
     { modal: true },
-    'Apply'
+    vscode.l10n.t('Apply')
   );
-  if (confirm !== 'Apply') return;
+  if (confirm !== vscode.l10n.t('Apply')) return;
     const ok = await writeImportChains(chains);
     if (!ok) {
-      void vscode.window.showErrorMessage('Some chains failed to resolve; rolled back.');
+      void vscode.window.showErrorMessage(vscode.l10n.t('Some chains failed to resolve; rolled back.'));
       return;
     }
-    void vscode.window.showInformationMessage('Chains applied successfully.');
+    void vscode.window.showInformationMessage(vscode.l10n.t('Chains applied successfully.'));
   }
 
   /** Directly write chains to fallbackRouter.chains (Global), then verify the
@@ -340,7 +348,7 @@ async function warmup(): Promise<void> {
   const proxyTargets: ProxyTarget[] = [];
   for (const c of config.chains) for (const t of c.targets) if (t.kind === 'proxy') proxyTargets.push(t);
   if (proxyTargets.length === 0) {
-    void vscode.window.showInformationMessage('No proxy targets configured.');
+    void vscode.window.showInformationMessage(vscode.l10n.t('No proxy targets configured.'));
     return;
   }
   for (const t of proxyTargets) {
@@ -362,7 +370,7 @@ async function warmup(): Promise<void> {
 async function setDefaultModel(): Promise<void> {
   const models = provider.getChains();
   const picks = [...models.values()].map(({ chain, info }) => ({ label: info.name, chain }));
-  const picked = await vscode.window.showQuickPick(picks, { title: 'Select composite model as default' });
+  const picked = await vscode.window.showQuickPick(picks, { title: vscode.l10n.t('Select composite model as default') });
   if (!picked) return;
   const chainId = `fallbackrouter:${picked.chain.id}`;
   const vendorId = `${VENDOR}/${chainId}`;
@@ -372,18 +380,18 @@ async function setDefaultModel(): Promise<void> {
     'chat.utilityModel': vendorId,
   };
   const shown = Object.entries(keys).map(([k, v]) => `${k} = ${v}`).join('\n');
-  const confirm = await vscode.window.showInformationMessage(`Will write:\n${shown}`, { modal: true }, 'Write');
-  if (confirm !== 'Write') return;
+  const confirm = await vscode.window.showInformationMessage(vscode.l10n.t('Will write:\n{shown}', { shown }), { modal: true }, vscode.l10n.t('Write'));
+  if (confirm !== vscode.l10n.t('Write')) return;
   // Loopback validate.
   const resolvable = await vscode.lm.selectChatModels({ vendor: VENDOR });
   if (!resolvable.some((m) => m.id === chainId)) {
-    void vscode.window.showErrorMessage('Model not resolvable; refusing to write.');
+    void vscode.window.showErrorMessage(vscode.l10n.t('Model not resolvable; refusing to write.'));
     return;
   }
   for (const [k, v] of Object.entries(keys)) {
     await vscode.workspace.getConfiguration().update(k, v, vscode.ConfigurationTarget.Global);
   }
-  void vscode.window.showInformationMessage('Default model set.');
+  void vscode.window.showInformationMessage(vscode.l10n.t('Default model set.'));
 }
 
 async function showDiagnostics(): Promise<void> {
@@ -403,11 +411,11 @@ async function showDiagnostics(): Promise<void> {
 
 export async function cleanup(context: vscode.ExtensionContext): Promise<void> {
   const confirm = await vscode.window.showWarningMessage(
-    'Delete all stored API keys and breaker state for Fallback Router?',
+    vscode.l10n.t('Delete all stored API keys and breaker state for Fallback Router?'),
     { modal: true },
-    'Delete'
+    vscode.l10n.t('Delete')
   );
-  if (confirm !== 'Delete') return;
+  if (confirm !== vscode.l10n.t('Delete')) return;
   // (a) Deletion iterates ONLY over ref NAMES captured at migration time
   // (T3, globalState 'legacySecretRefs'). Known secret VALUES (knownSecrets)
   // are merged into the redaction list but are values, not keys — they must
@@ -427,7 +435,7 @@ export async function cleanup(context: vscode.ExtensionContext): Promise<void> {
   for (const k of context.globalState.keys()) {
     if (k.startsWith('fallbackrouter.')) await context.globalState.update(k, undefined);
   }
-  void vscode.window.showInformationMessage('Fallback Router data cleaned.');
+  void vscode.window.showInformationMessage(vscode.l10n.t('Fallback Router data cleaned.'));
 }
 
 function openSettings(): Thenable<void> {
