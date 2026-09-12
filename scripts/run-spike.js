@@ -32,14 +32,45 @@ function repoPathForLauncher(repoRoot) {
   return junction;
 }
 
+// The companion extension declares extensionDependencies: ["vicanent.gcmp"]
+// (T2). A bare extension host refuses to activate it when the dependency is
+// missing, which fails the spike before any probe runs. Provide a minimal
+// DORMANT stand-in (no LM providers, no-op activate) via --extensions-dir so
+// the dependency check passes; the spike never needs real GCMP.
+// Idempotent: only created once under .vscode-test (gitignored).
+function ensureGcmpStub(launchPath) {
+  const stubRoot = path.join(launchPath, '.vscode-test', 'stub-extensions');
+  const stubDir = path.join(stubRoot, 'vicanent.gcmp');
+  const pkgFile = path.join(stubDir, 'package.json');
+  if (!fs.existsSync(pkgFile)) {
+    const pkg = {
+      name: 'gcmp',
+      displayName: 'GCMP Stub (spike fixture)',
+      description: 'Minimal stand-in for vicanent.gcmp so the extension-host spike can activate its companion extension.',
+      publisher: 'vicanent',
+      version: '0.28.1',
+      engines: { vscode: '^1.125.0' },
+      main: './main.js',
+      activationEvents: ['onStartupFinished'],
+    };
+    fs.mkdirSync(stubDir, { recursive: true });
+    fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2));
+    fs.writeFileSync(path.join(stubDir, 'main.js'), 'exports.activate = () => {}; exports.deactivate = () => {};\n');
+    console.log(`gcmp dependency stub created at ${stubDir}`);
+  }
+  return stubRoot;
+}
+
 (async () => {
   const repoRoot = path.resolve(__dirname, '..');
   try {
     const launchPath = repoPathForLauncher(repoRoot);
+    const stubExtRoot = ensureGcmpStub(launchPath);
     await runTests({
       version: 'stable',
       extensionDevelopmentPath: launchPath,
       extensionTestsPath: path.join(launchPath, 'out-test', 'spike.runner.js'),
+      launchArgs: ['--extensions-dir', stubExtRoot],
     });
     console.log('spike runner completed (exit 0)');
     process.exit(0);
