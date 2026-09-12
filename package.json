@@ -45,27 +45,27 @@
     "commands": [
       {
         "command": "fallbackrouter.manage",
-        "title": "Fallback Router: Manage"
+        "title": "%commands.fallbackrouter.manage.title%"
       },
       {
         "command": "fallbackrouter.apply",
-        "title": "Fallback Router: Apply imported chains"
+        "title": "%commands.fallbackrouter.apply.title%"
       },
       {
         "command": "fallbackrouter.warmup",
-        "title": "Fallback Router: Warm up proxy targets"
+        "title": "%commands.fallbackrouter.warmup.title%"
       },
       {
         "command": "fallbackrouter.set-default-model",
-        "title": "Fallback Router: Set default model"
+        "title": "%commands.fallbackrouter.set-default-model.title%"
       },
       {
         "command": "fallbackrouter.showDiagnostics",
-        "title": "Fallback Router: Show diagnostics"
+        "title": "%commands.fallbackrouter.showDiagnostics.title%"
       },
       {
         "command": "fallbackrouter.cleanup",
-        "title": "Fallback Router: Clean up stored data"
+        "title": "%commands.fallbackrouter.cleanup.title%"
       }
     ],
     "configuration": {

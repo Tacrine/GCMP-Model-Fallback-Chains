@@ -17,5 +17,11 @@
 	"configuration.properties.fallbackRouter.noticeStyle.title": "切换提示样式",
 	"configuration.properties.fallbackRouter.noticeStyle.markdownDescription": "中流切换可见提示的样式。",
 	"configuration.properties.fallbackRouter.logLevel.title": "日志级别",
-	"configuration.properties.fallbackRouter.logLevel.markdownDescription": "输出通道的日志级别。"
+	"configuration.properties.fallbackRouter.logLevel.markdownDescription": "输出通道的日志级别。",
+	"commands.fallbackrouter.manage.title": "回退路由器：管理",
+	"commands.fallbackrouter.apply.title": "回退路由器：应用导入的链",
+	"commands.fallbackrouter.warmup.title": "回退路由器：预热代理目标",
+	"commands.fallbackrouter.set-default-model.title": "回退路由器：设置默认模型",
+	"commands.fallbackrouter.showDiagnostics.title": "回退路由器：显示诊断信息",
+	"commands.fallbackrouter.cleanup.title": "回退路由器：清理已存储数据"
 }

@@ -17,5 +17,11 @@
 	"configuration.properties.fallbackRouter.noticeStyle.title": "Notice style",
 	"configuration.properties.fallbackRouter.noticeStyle.markdownDescription": "Style of visible mid-stream switch notices.",
 	"configuration.properties.fallbackRouter.logLevel.title": "Log level",
-	"configuration.properties.fallbackRouter.logLevel.markdownDescription": "Output channel log level."
+	"configuration.properties.fallbackRouter.logLevel.markdownDescription": "Output channel log level.",
+	"commands.fallbackrouter.manage.title": "Fallback Router: Manage",
+	"commands.fallbackrouter.apply.title": "Fallback Router: Apply imported chains",
+	"commands.fallbackrouter.warmup.title": "Fallback Router: Warm up proxy targets",
+	"commands.fallbackrouter.set-default-model.title": "Fallback Router: Set default model",
+	"commands.fallbackrouter.showDiagnostics.title": "Fallback Router: Show diagnostics",
+	"commands.fallbackrouter.cleanup.title": "Fallback Router: Clean up stored data"
 }
