@@ -1,0 +1,21 @@
+{
+	"configuration.title": "回退路由器",
+	"configuration.properties.fallbackRouter.chains.title": "模型链",
+	"configuration.properties.fallbackRouter.chains.markdownDescription": "复合模型链。每个链是按失败顺序依次尝试的目标的有序列表。",
+	"configuration.properties.fallbackRouter.retry.title": "重试策略",
+	"configuration.properties.fallbackRouter.retry.markdownDescription": "每个目标的重试策略。",
+	"configuration.properties.fallbackRouter.circuitBreaker.title": "熔断器",
+	"configuration.properties.fallbackRouter.circuitBreaker.markdownDescription": "每个目标的熔断器。",
+	"configuration.properties.fallbackRouter.maxTurnMs.title": "单轮最大时限（毫秒）",
+	"configuration.properties.fallbackRouter.maxTurnMs.markdownDescription": "整条链的墙钟截止时间。",
+	"configuration.properties.fallbackRouter.maxTargetsPerTurn.title": "每轮最大目标数",
+	"configuration.properties.fallbackRouter.maxTargetsPerTurn.markdownDescription": "每轮最多尝试的目标数。",
+	"configuration.properties.fallbackRouter.importMode.title": "GCMP 导入模式",
+	"configuration.properties.fallbackRouter.importMode.markdownDescription": "GCMP 导入分组模式。",
+	"configuration.properties.fallbackRouter.retryOnRateLimit.title": "限流时重试",
+	"configuration.properties.fallbackRouter.retryOnRateLimit.markdownDescription": "将 rateLimited/quotaExceeded 视为可重试。",
+	"configuration.properties.fallbackRouter.noticeStyle.title": "切换提示样式",
+	"configuration.properties.fallbackRouter.noticeStyle.markdownDescription": "中流切换可见提示的样式。",
+	"configuration.properties.fallbackRouter.logLevel.title": "日志级别",
+	"configuration.properties.fallbackRouter.logLevel.markdownDescription": "输出通道的日志级别。"
+}

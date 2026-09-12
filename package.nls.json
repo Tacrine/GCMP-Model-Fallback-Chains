@@ -1,0 +1,21 @@
+{
+	"configuration.title": "Fallback Router",
+	"configuration.properties.fallbackRouter.chains.title": "Model chains",
+	"configuration.properties.fallbackRouter.chains.markdownDescription": "Composite model chains. Each chain is an ordered list of targets tried in sequence on failure.",
+	"configuration.properties.fallbackRouter.retry.title": "Retry policy",
+	"configuration.properties.fallbackRouter.retry.markdownDescription": "Per-target retry policy.",
+	"configuration.properties.fallbackRouter.circuitBreaker.title": "Circuit breaker",
+	"configuration.properties.fallbackRouter.circuitBreaker.markdownDescription": "Per-target circuit breaker.",
+	"configuration.properties.fallbackRouter.maxTurnMs.title": "Max turn deadline (ms)",
+	"configuration.properties.fallbackRouter.maxTurnMs.markdownDescription": "Whole-chain wall-clock deadline.",
+	"configuration.properties.fallbackRouter.maxTargetsPerTurn.title": "Max targets per turn",
+	"configuration.properties.fallbackRouter.maxTargetsPerTurn.markdownDescription": "Max targets tried per turn.",
+	"configuration.properties.fallbackRouter.importMode.title": "GCMP import mode",
+	"configuration.properties.fallbackRouter.importMode.markdownDescription": "GCMP import grouping mode.",
+	"configuration.properties.fallbackRouter.retryOnRateLimit.title": "Retry on rate limit",
+	"configuration.properties.fallbackRouter.retryOnRateLimit.markdownDescription": "Treat rateLimited/quotaExceeded as retryable.",
+	"configuration.properties.fallbackRouter.noticeStyle.title": "Notice style",
+	"configuration.properties.fallbackRouter.noticeStyle.markdownDescription": "Style of visible mid-stream switch notices.",
+	"configuration.properties.fallbackRouter.logLevel.title": "Log level",
+	"configuration.properties.fallbackRouter.logLevel.markdownDescription": "Output channel log level."
+}

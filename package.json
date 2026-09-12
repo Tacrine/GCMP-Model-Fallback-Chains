@@ -69,12 +69,12 @@
       }
     ],
     "configuration": {
-      "title": "Fallback Router",
+      "title": "%configuration.title%",
       "properties": {
         "fallbackRouter.chains": {
           "type": "array",
           "default": [],
-          "markdownDescription": "Composite model chains. Each chain is an ordered list of targets tried in sequence on failure."
+          "markdownDescription": "%configuration.properties.fallbackRouter.chains.markdownDescription%"
         },
         "fallbackRouter.retry": {
           "type": "object",
@@ -84,7 +84,7 @@
             "backoffFactor": 2,
             "maxDelayMs": 15000
           },
-          "markdownDescription": "Per-target retry policy."
+          "markdownDescription": "%configuration.properties.fallbackRouter.retry.markdownDescription%"
         },
         "fallbackRouter.circuitBreaker": {
           "type": "object",
@@ -92,17 +92,17 @@
             "failureThreshold": 3,
             "cooldownMs": 60000
           },
-          "markdownDescription": "Per-target circuit breaker."
+          "markdownDescription": "%configuration.properties.fallbackRouter.circuitBreaker.markdownDescription%"
         },
         "fallbackRouter.maxTurnMs": {
           "type": "number",
           "default": 600000,
-          "markdownDescription": "Whole-chain wall-clock deadline."
+          "markdownDescription": "%configuration.properties.fallbackRouter.maxTurnMs.markdownDescription%"
         },
         "fallbackRouter.maxTargetsPerTurn": {
           "type": "number",
           "default": 5,
-          "markdownDescription": "Max targets tried per turn."
+          "markdownDescription": "%configuration.properties.fallbackRouter.maxTargetsPerTurn.markdownDescription%"
         },
         "fallbackRouter.importMode": {
           "type": "string",
@@ -111,12 +111,12 @@
             "exact"
           ],
           "default": "family",
-          "markdownDescription": "GCMP import grouping mode."
+          "markdownDescription": "%configuration.properties.fallbackRouter.importMode.markdownDescription%"
         },
         "fallbackRouter.retryOnRateLimit": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Treat rateLimited/quotaExceeded as retryable."
+          "markdownDescription": "%configuration.properties.fallbackRouter.retryOnRateLimit.markdownDescription%"
         },
         "fallbackRouter.noticeStyle": {
           "type": "string",
@@ -125,7 +125,7 @@
             "plain"
           ],
           "default": "markdown",
-          "markdownDescription": "Style of visible mid-stream switch notices."
+          "markdownDescription": "%configuration.properties.fallbackRouter.noticeStyle.markdownDescription%"
         },
         "fallbackRouter.logLevel": {
           "type": "string",
@@ -136,7 +136,7 @@
             "debug"
           ],
           "default": "info",
-          "markdownDescription": "Output channel log level."
+          "markdownDescription": "%configuration.properties.fallbackRouter.logLevel.markdownDescription%"
         }
       }
     }
