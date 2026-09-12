@@ -119,4 +119,41 @@ describe('FallbackRouterProvider.refresh (live metadata merge, T3)', () => {
     expect(models).toHaveLength(1);
     expect(vscodeMock.__channelLines()).toHaveLength(0);
   });
-});
+
+    it('lets the newest refresh win when overlapping refreshes race (F2 generation guard)', async () => {
+      // Config object is mutable — the import path swaps config mid-flight.
+      // Provider must read the MUTABLE outer cfg (direct deps, not makeProvider).
+      let cfg = makeConfig([{ id: 'old', name: 'old', targets: [{ kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'old-model' }] }]);
+      const p = new FallbackRouterProvider({
+        getConfig: () => cfg,
+        getSecretsProvider: () => async () => [],
+        secrets: stubSecrets as never,
+        context: stubContext,
+        logger: stubLogger as never,
+        statusBar: stubStatus as never,
+      });
+      let releaseR1!: () => void;
+      const gate = new Promise<void>((r) => { releaseR1 = r; });
+      // First refresh hangs on selectChatModels for the OLD chain…
+      let r1Resolved = 0;
+      (vscodeMock.lm as { selectChatModels: (s: { id?: string }) => Promise<FakeModel[]> }).selectChatModels = async (s) => {
+        if (s.id === 'old-model') {
+          r1Resolved++;
+          await gate;
+          return [{ vendor: 'gcmp.compatible', id: 'old-model', maxInputTokens: 64000 }];
+        }
+        return [{ vendor: 'gcmp.compatible', id: 'new-model', maxInputTokens: 128000 }];
+      };
+      const r1 = p.refresh();
+      // …while the second refresh (new config) completes first.
+      cfg = makeConfig([{ id: 'new', name: 'new', targets: [{ kind: 'proxy', vendor: 'gcmp.compatible', modelId: 'new-model' }] }]);
+      await p.refresh();
+      // Release the stale refresh; its gen is superseded → must self-dismiss.
+      releaseR1();
+      await r1;
+      expect(r1Resolved).toBeGreaterThan(0);
+      const models = await p.provideLanguageModelChatInformation({}, {} as never);
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('fallbackrouter:new'); // stale snapshot never installed
+    });
+  });

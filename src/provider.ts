@@ -80,6 +80,10 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
   private readonly breakers = new Map<string, CircuitBreaker>();
   private readonly emitter = new vscode.EventEmitter<void>();
   private activeControllers = new Set<AbortController>();
+    /** Monotonic refresh generation: only the most recently started refresh may
+       * commit, so an older in-flight refresh finishing last cannot install a
+       * stale model list over a newer one (F2 remediation). */
+    private refreshGen = 0;
 
   readonly onDidChangeLanguageModelChatInformation: vscode.Event<void> = this.emitter.event;
 
@@ -95,7 +99,8 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
      * imageInput false — don't claim image support we can't prove).
      */
     async refresh(): Promise<void> {
-      const cfg = this.deps.getConfig();
+          const gen = ++this.refreshGen;
+          const cfg = this.deps.getConfig();
       const nextByChain = new Map<string, { chain: Chain; info: vscode.LanguageModelChatInformation }>();
       const nextInfos: vscode.LanguageModelChatInformation[] = [];
       await Promise.all(
@@ -128,10 +133,13 @@ export class FallbackRouterProvider implements vscode.LanguageModelChatProvider 
         })
       );
       // Swap only after the full merge completes (no flash/empty window).
-      this.modelsByChain = nextByChain;
-      this.models = nextInfos;
-      this.emitter.fire();
-    }
+            // Self-dismiss if a newer refresh was started while we were awaiting:
+            // the newest snapshot is authoritative (F2 remediation).
+            if (gen !== this.refreshGen) return;
+            this.modelsByChain = nextByChain;
+            this.models = nextInfos;
+            this.emitter.fire();
+          }
 
   async provideLanguageModelChatInformation(
     options: { silent?: boolean },

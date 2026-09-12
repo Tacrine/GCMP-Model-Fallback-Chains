@@ -92,11 +92,15 @@ export class ProxyTransport implements Transport {
       toolMode: options.toolMode as unknown,
       modelOptions: options.modelOptions,
     };
-    try {
-      const response = await model.sendRequest(upstreamMsgs, upstreamOptions, token);
-      let emittedParts = 0;
-      let emittedToolCall = false;
-      for await (const chunk of response.stream) {
+        // Track emitted parts outside the try so a mid-stream error keeps the real
+        // counts: the router's anti-duplication guards (emittedParts > 0 /
+        // emittedToolCall) then take the terminal non-retry path instead of
+        // re-streaming a fresh response over already-emitted output.
+        let emittedParts = 0;
+        let emittedToolCall = false;
+        try {
+          const response = await model.sendRequest(upstreamMsgs, upstreamOptions, token);
+          for await (const chunk of response.stream) {
         if (token.isCancellationRequested) break;
         const part = this.deps.toDownstreamPart(chunk);
         if (!part) continue;
@@ -110,7 +114,7 @@ export class ProxyTransport implements Transport {
       return { ok: true, emittedParts, emittedToolCall };
     } catch (e) {
       const isNoPerm = e && typeof e === 'object' && (e as { code?: string }).code === 'NoPermissions';
-      return { ok: false, error: e, retryable: !isNoPerm, emittedParts: 0, emittedToolCall: false };
+          return { ok: false, error: e, retryable: !isNoPerm, emittedParts, emittedToolCall };
     }
   }
 }

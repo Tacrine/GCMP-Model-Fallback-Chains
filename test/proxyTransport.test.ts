@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ProxyTransport, type LmLike, type ChatModelLike } from '../src/transport/proxyTransport';
 import type { LangMsg, LangPart, Target, Cancel, Logger } from '../src/types';
+import type { SendOptions } from '../src/types';
 
 const noopLogger: Logger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} };
+
+// SendOptions.timeouts was removed with the HTTP stack (T3); tests pass a bare
+// options object.
+const opts: SendOptions = {};
 
 function token(): Cancel {
   return { isCancellationRequested: false, onCancellationRequested: () => () => {} };
@@ -42,7 +47,7 @@ describe('ProxyTransport', () => {
   it('forwards text parts verbatim on success', async () => {
     const t = makeTransport([makeModel()]);
     const emitted: LangPart[] = [];
-    const out = await t.send(proxyTarget(), [], { timeouts: { connectMs: 100, headersMs: 100, firstByteMs: 100, stallMs: 1000 } }, (p) => emitted.push(p), token());
+    const out = await t.send(proxyTarget(), [], opts, (p) => emitted.push(p), token());
     expect(out.ok).toBe(true);
     expect(emitted).toEqual([{ kind: 'text', value: 'ping' }]);
   });
@@ -50,14 +55,14 @@ describe('ProxyTransport', () => {
   it('filters out fallbackrouter-vendor models (recursion guard)', async () => {
     const lm: LmLike = { async selectChatModels() { return [makeModel({ vendor: 'fallbackrouter', id: 'x' })]; } };
     const t = new ProxyTransport({ logger: noopLogger, lm, toUpstreamMessages: (m) => m as unknown as unknown[], toUpstreamPart: (p) => p as never, toDownstreamPart: (p) => ({ kind: 'text', value: 'x' }) });
-    const out = await t.send(proxyTarget('fallbackrouter', 'x'), [], { timeouts: { connectMs: 100, headersMs: 100, firstByteMs: 100, stallMs: 1000 } }, vi.fn(), token());
+    const out = await t.send(proxyTarget('fallbackrouter', 'x'), [], opts, vi.fn(), token());
     expect(out.ok).toBe(false);
     expect(out.retryable).toBe(false);
   });
 
   it('returns explicit error when target not found', async () => {
     const t = makeTransport([]);
-    const out = await t.send(proxyTarget('gcmp.compatible', 'nonexistent'), [], { timeouts: { connectMs: 100, headersMs: 100, firstByteMs: 100, stallMs: 1000 } }, vi.fn(), token());
+    const out = await t.send(proxyTarget('gcmp.compatible', 'nonexistent'), [], opts, vi.fn(), token());
     expect(out.ok).toBe(false);
     expect(out.retryable).toBe(false);
     expect(String(out.error)).toContain('未找到');
@@ -67,9 +72,33 @@ describe('ProxyTransport', () => {
     const err = Object.assign(new Error('no perms'), { code: 'NoPermissions' });
     const model = makeModel({ async sendRequest() { throw err; } });
     const t = makeTransport([model]);
-    const out = await t.send(proxyTarget(), [], { timeouts: { connectMs: 100, headersMs: 100, firstByteMs: 100, stallMs: 1000 } }, vi.fn(), token());
+    const out = await t.send(proxyTarget(), [], opts, vi.fn(), token());
     expect(out.ok).toBe(false);
     expect(out.retryable).toBe(false);
     expect((out.error as { code?: string }).code).toBe('NoPermissions');
   });
-});
+
+      it('keeps emitted part counts when the stream fails mid-way (F2 anti-duplication)', async () => {
+        const model = makeModel({
+          async sendRequest() {
+            return {
+              stream: (async function* () {
+                yield { kind: 'text', value: 'partial' };
+                yield { kind: 'toolCall', callId: 'c1', name: 'n1', input: {} };
+                throw new Error('connection lost');
+              })(),
+            };
+          },
+        });
+        const t = makeTransport([model]);
+        const emitted: LangPart[] = [];
+        const out = await t.send(proxyTarget(), [], opts, (p) => emitted.push(p), token());
+        expect(out.ok).toBe(false);
+        expect(out.retryable).toBe(true); // not NoPermissions
+        // The router's guards rely on real counts so a mid-stream failure takes the
+        // terminal path instead of re-streaming a fresh response over emitted text.
+        expect(out.emittedParts).toBe(2);
+        expect(out.emittedToolCall).toBe(true);
+        expect(emitted).toHaveLength(2);
+      });
+    });
