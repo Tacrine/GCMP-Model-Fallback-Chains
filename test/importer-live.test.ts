@@ -219,7 +219,7 @@ describe('importGcmpFlow (T5)', () => {
     expect(JSON.stringify(written)).not.toContain('gcmp-bridge'); // impostor filtered out
         expect(JSON.stringify(written)).not.toContain('gcmp.*'); // no wildcard vendors
     expect(JSON.stringify(written)).not.toContain('fallbackrouter:');
-    expect(showInfo.mock.calls[0][0]).toContain('已写入配置');
+    expect(showInfo.mock.calls[0][0]).toContain('configuration written');
   });
 
   it('no live GCMP models -> warning mentions configuring GCMP, no config write', async () => {
@@ -231,13 +231,13 @@ describe('importGcmpFlow (T5)', () => {
 
     await importGcmpFlow();
 
-    expect(warn.mock.calls[0][0]).toContain('配置 GCMP');
+    expect(warn.mock.calls[0][0]).toContain('Configure a GCMP provider');
     expect(updates).toHaveLength(0);
   });
 
   it('empty model list opens GCMP setup when user picks the action', async () => {
     stubSelect([]);
-    stubWarnings('打开配置');
+    stubWarnings('Open configuration');
     const exec = vi.fn(async (): Promise<unknown> => undefined);
     (vscodeMock.commands as { executeCommand: typeof exec }).executeCommand = exec;
 
@@ -249,7 +249,7 @@ describe('importGcmpFlow (T5)', () => {
 
   it('falls back to settings.json when GCMP contributes no config command', async () => {
     stubSelect([]);
-    stubWarnings('打开配置');
+    stubWarnings('Open configuration');
     stubGcmpExtension({ packageJSON: { contributes: { languageModelChatProviders: [] } } });
     const exec = vi.fn(async (): Promise<unknown> => undefined);
     (vscodeMock.commands as { executeCommand: typeof exec }).executeCommand = exec;

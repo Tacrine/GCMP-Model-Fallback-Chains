@@ -227,27 +227,32 @@ async function openGcmpSetup(): Promise<void> {
 export async function importGcmpFlow(): Promise<void> {
   const live: LmModelLike[] = await listGcmpModels();
   if (live.length === 0) {
+    const openConfiguration = vscode.l10n.t('Open configuration');
     const choice = await vscode.window.showWarningMessage(
-      '未找到可用的 GCMP 供应商模型，请先配置 GCMP 供应商后重试。',
-      '打开配置'
+      vscode.l10n.t('No GCMP provider models are available. Configure a GCMP provider and try again.'),
+      openConfiguration
     );
-    if (choice === '打开配置') await openGcmpSetup();
+    if (choice === openConfiguration) await openGcmpSetup();
     return;
   }
   const mode = vscode.workspace.getConfiguration('fallbackRouter').get<'family' | 'exact'>('importMode', 'family');
   const result = importFromLm(live, mode);
   for (const s of result.skipped) logger.warn(`[import] skipped ${s.entryId}: ${s.reason}`);
   if (result.chains.length === 0) {
-    void vscode.window.showErrorMessage('未生成可用的代理链。');
+    void vscode.window.showErrorMessage(vscode.l10n.t('No usable proxy chains were generated.'));
     return;
   }
   const ok = await writeImportChains(result.chains);
-  const summary = `从 GCMP 导入 ${result.chains.length} 条链 / ${result.chains.reduce((a, c) => a + c.targets.length, 0)} 个目标 (${mode} 模式)`;
+  const summary = vscode.l10n.t('Imported {chainCount} chain(s) / {targetCount} target(s) from GCMP ({mode} mode)', {
+    chainCount: result.chains.length,
+    targetCount: result.chains.reduce((a, c) => a + c.targets.length, 0),
+    mode,
+  });
   if (ok) {
       logger?.info(`[import] ${summary}`);
-    void vscode.window.showInformationMessage(`${summary} — 已写入配置。`);
+    void vscode.window.showInformationMessage(vscode.l10n.t('{summary} — configuration written.', { summary }));
   } else {
-    void vscode.window.showErrorMessage(`${summary} — 部分链无法解析，已回滚。`);
+    void vscode.window.showErrorMessage(vscode.l10n.t('{summary} — some chains could not be resolved; rolled back.', { summary }));
   }
 }
 
